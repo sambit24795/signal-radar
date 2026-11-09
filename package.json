@@ -5,18 +5,25 @@
   "type": "module",
   "packageManager": "pnpm@12.16.1",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "radar": "tsx apps/cli/src/index.ts"
+    "radar": "tsx apps/cli/src/index.ts",
+    "db:up": "docker compose up -d --wait postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @radar/db generate",
+    "db:migrate": "pnpm --filter @radar/db migrate",
+    "api:dev": "tsx watch --env-file-if-exists=.env apps/api/src/server.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@radar/api": "workspace:*",
     "@radar/core": "workspace:*",
+    "@radar/db": "workspace:*",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",
     "prettier": "^3.9.10",

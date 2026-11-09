@@ -1,0 +1,1 @@
+ALTER TABLE "queue_item" ADD COLUMN "added_by_user" boolean DEFAULT false NOT NULL;

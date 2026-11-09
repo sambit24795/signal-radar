@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xml:lang="en-US" xmlns="http://www.w3.org/2005/Atom">
+  <id>tag:www.producthunt.com,2005:/feed</id>
+  <link rel="alternate" type="text/html" href="https://www.producthunt.com"/>
+  <link rel="self" type="application/atom+xml" href="https://www.producthunt.com/feed"/>
+  <title>Product Hunt — The best new products, every day</title>
+  <updated>2026-11-09T00:01:00-08:00</updated>
+  <entry>
+    <id>tag:www.producthunt.com,2005:Post/1302788</id>
+    <published>2026-11-03T02:49:37-08:00</published>
+    <updated>2026-11-09T10:32:33-08:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.producthunt.com/products/agent-powered-geo-by-dageno"/>
+    <title>Dageno AI 2.0</title>
+    <content type="html">          &lt;p&gt;
+            See why AI recommends your competitors instead of you
+          &lt;/p&gt;
+          &lt;p&gt;
+            &lt;a href="https://www.producthunt.com/products/agent-powered-geo-by-dageno?utm_campaign=producthunt-atom-posts-feed&amp;amp;utm_medium=rss-feed&amp;amp;utm_source=producthunt-atom-posts-feed"&gt;Discussion&lt;/a&gt;
+            |
+            &lt;a href="https://www.producthunt.com/r/p/1302788?app_id=339"&gt;Link&lt;/a&gt;
+          &lt;/p&gt;
+</content>
+    <author>
+      <name>Zac Zuo</name>
+    </author>
+  </entry>
+<entry>
+    <id>tag:www.producthunt.com,2005:Post/1301600</id>
+    <published>2026-11-02T03:48:42-08:00</published>
+    <updated>2026-11-09T10:26:16-08:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.producthunt.com/products/pawse-ai"/>
+    <title>Pawse.ai</title>
+    <content type="html">          &lt;p&gt;
+            Sound engineered for dogs, not humans
+          &lt;/p&gt;
+          &lt;p&gt;
+            &lt;a href="https://www.producthunt.com/products/pawse-ai?utm_campaign=producthunt-atom-posts-feed&amp;amp;utm_medium=rss-feed&amp;amp;utm_source=producthunt-atom-posts-feed"&gt;Discussion&lt;/a&gt;
+            |
+            &lt;a href="https://www.producthunt.com/r/p/1301600?app_id=339"&gt;Link&lt;/a&gt;
+          &lt;/p&gt;
+</content>
+    <author>
+      <name>Katherine Munoz</name>
+    </author>
+  </entry>
+<entry>
+    <id>tag:www.producthunt.com,2005:Post/1305634</id>
+    <published>2026-11-05T07:56:52-08:00</published>
+    <updated>2026-11-09T10:30:29-08:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.producthunt.com/products/cardboard-3"/>
+    <title>Cardboard AI</title>
+    <content type="html">          &lt;p&gt;
+            Best way to edit videos with AI
+          &lt;/p&gt;
+          &lt;p&gt;
+            &lt;a href="https://www.producthunt.com/products/cardboard-3?utm_campaign=producthunt-atom-posts-feed&amp;amp;utm_medium=rss-feed&amp;amp;utm_source=producthunt-atom-posts-feed"&gt;Discussion&lt;/a&gt;
+            |
+            &lt;a href="https://www.producthunt.com/r/p/1305634?app_id=339"&gt;Link&lt;/a&gt;
+          &lt;/p&gt;
+</content>
+    <author>
+      <name>Garry Tan</name>
+    </author>
+  </entry>
+<entry>
+    <id>tag:www.producthunt.com,2005:Post/1306884</id>
+    <published>2026-11-06T08:47:29-08:00</published>
+    <updated>2026-11-09T10:32:58-08:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.producthunt.com/products/if-you-read-this"/>
+    <title>If You Read This</title>
+    <content type="html">          &lt;p&gt;
+            A daily check-in app that works like a dead man's switch
+          &lt;/p&gt;
+          &lt;p&gt;
+            &lt;a href="https://www.producthunt.com/products/if-you-read-this?utm_campaign=producthunt-atom-posts-feed&amp;amp;utm_medium=rss-feed&amp;amp;utm_source=producthunt-atom-posts-feed"&gt;Discussion&lt;/a&gt;
+            |
+            &lt;a href="https://www.producthunt.com/r/p/1306884?app_id=339"&gt;Link&lt;/a&gt;
+          &lt;/p&gt;
+</content>
+    <author>
+      <name>Ryan Mercado</name>
+    </author>
+  </entry>
+<entry>
+    <id>tag:www.producthunt.com,2005:Post/1308023</id>
+    <published>2026-11-07T10:28:56-08:00</published>
+    <updated>2026-11-09T10:13:25-08:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.producthunt.com/products/higgsfield"/>
+    <title>Higgsfield Miracle</title>
+    <content type="html">          &lt;p&gt;
+            Edit any part of a video without changing the rest
+          &lt;/p&gt;
+          &lt;p&gt;
+            &lt;a href="https://www.producthunt.com/products/higgsfield?utm_campaign=producthunt-atom-posts-feed&amp;amp;utm_medium=rss-feed&amp;amp;utm_source=producthunt-atom-posts-feed"&gt;Discussion&lt;/a&gt;
+            |
+            &lt;a href="https://www.producthunt.com/r/p/1308023?app_id=339"&gt;Link&lt;/a&gt;
+          &lt;/p&gt;
+</content>
+    <author>
+      <name>Rohan Chaubey</name>
+    </author>
+  </entry>
+</feed>

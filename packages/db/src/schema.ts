@@ -200,6 +200,8 @@ export const queueItem = pgTable(
     status: text('status').$type<QueueStatus>().notNull().default('new'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
+    /** True for items the user added themselves (POST /api/queue); drives the daily add cap. */
+    addedByUser: boolean('added_by_user').notNull().default(false),
   },
   (t) => [
     uniqueIndex('queue_item_user_url_uq').on(t.userId, t.url),

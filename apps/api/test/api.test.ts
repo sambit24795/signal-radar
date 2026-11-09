@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { customFeedId } from '@radar/core';
 import { schema } from '@radar/db';
@@ -11,8 +11,14 @@ const RSS = `<?xml version="1.0"?><rss version="2.0"><channel><title>Space Weekl
 <item><title>Comet spotted</title><link>https://space.example/c</link></item>
 <item><title>Fourth story</title><link>https://space.example/d</link></item></channel></rss>`;
 
+const PAGE = `<html><head><title>Fallback title</title>
+<meta property="og:title" content="Xenia &amp; friends: a deep dive">
+<meta name="description" content="Plain description"><meta property="og:description" content="Why emulation matters"></head><body>hi</body></html>`;
+
 const netFetch = async (url: string): Promise<Response> => {
   const host = new URL(url).hostname;
+  if (host === 'page.example') return new Response(PAGE);
+  if (host === 'api.deepseek.com') return new Response('boom', { status: 500 });
   if (host === 'space.example') return new Response(RSS);
   if (host === 'redir.example') {
     return new Response('', { status: 302, headers: { location: 'http://169.254.169.254/' } });
@@ -455,6 +461,127 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect(seen).toHaveLength(45);
       expect(new Set(seen).size).toBe(45);
       expect(seen[0]).toBe('https://example.com/p44');
+    });
+  });
+
+  describe('add to Ideas (POST /api/queue)', () => {
+    const add = (u: Awaited<ReturnType<typeof signUp>> | undefined, json: unknown) =>
+      call(ctx.app, '/api/queue', { method: 'POST', ...(u ? { user: u } : {}), json });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('adds with a title and no page fetch, as picked', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      const res = await add(u, {
+        url: 'https://example.com/post?utm_source=x',
+        title: 'My find',
+        snippet: 'A short note about the find.',
+        source: 'Newsletter',
+      });
+      expect(res.status).toBe(201);
+      const { item } = (await res.json()) as Json;
+      expect(item).toMatchObject({
+        url: 'https://example.com/post',
+        title: 'My find',
+        source: 'Newsletter',
+        status: 'picked',
+        addedByUser: true,
+        summary: 'A short note about the find.',
+      });
+      expect(item.decidedAt).toBeTruthy();
+      const picked = (await (
+        await call(ctx.app, '/api/queue?status=picked', { user: u })
+      ).json()) as Json;
+      expect(picked.items).toHaveLength(1);
+    });
+
+    it('reads og:title and og:description when only a URL is given', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      const res = await add(u, { url: 'https://page.example/article' });
+      expect(res.status).toBe(201);
+      const { item } = (await res.json()) as Json;
+      expect(item).toMatchObject({
+        title: 'Xenia & friends: a deep dive',
+        summary: 'Why emulation matters',
+        source: 'Added by you',
+        status: 'picked',
+      });
+    });
+
+    it('rejects private and malformed URLs with 400', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      for (const url of [
+        'http://127.0.0.1/x',
+        'http://localhost/x',
+        'ftp://example.com/x',
+        'nope',
+      ]) {
+        expect((await add(u, { url, title: 't' })).status).toBe(400);
+      }
+      // resolves to a private address: blocked by the pinned fetch, not the syntax check
+      expect((await add(u, { url: 'https://private.example/x' })).status).toBe(400);
+      expect(await ctx.db.select().from(schema.queueItem)).toHaveLength(0);
+    });
+
+    it('falls back to the snippet summary when the model fails', async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test');
+      const u = await signUp(ctx.app, 'a@example.com');
+      const res = await add(u, {
+        url: 'https://example.com/ai',
+        title: 'AI path',
+        snippet: 'Fallback text.',
+      });
+      expect(res.status).toBe(201);
+      const { item } = (await res.json()) as Json;
+      expect(item).toMatchObject({ summary: 'Fallback text.', effort: null, hook: null });
+    });
+
+    it('picks an existing item and returns 200', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      const [row] = await seedQueue(u.id, 1, 'dup');
+      await ctx.db
+        .update(schema.queueItem)
+        .set({ status: 'skipped' })
+        .where(eq(schema.queueItem.id, row!.id));
+      const res = await add(u, { url: row!.url, title: 'again' });
+      expect(res.status).toBe(200);
+      const { item } = (await res.json()) as Json;
+      expect(item).toMatchObject({ id: row!.id, status: 'picked', addedByUser: false });
+      expect(await ctx.db.select().from(schema.queueItem)).toHaveLength(1);
+    });
+
+    it('caps adds at 30 per rolling 24 hours with 429', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      await ctx.db.insert(schema.queueItem).values(
+        Array.from({ length: 30 }, (_, i) => ({
+          userId: u.id,
+          url: `https://example.com/cap${i}`,
+          title: `cap ${i}`,
+          source: 'Added by you',
+          status: 'picked' as const,
+          addedByUser: true,
+        })),
+      );
+      const res = await add(u, { url: 'https://example.com/one-more', title: 'x' });
+      expect(res.status).toBe(429);
+      expect(((await res.json()) as Json).error).toMatch(/30 items a day/);
+      // a duplicate is still fine, and adds older than 24h stop counting
+      expect((await add(u, { url: 'https://example.com/cap0', title: 'x' })).status).toBe(200);
+      await ctx.db
+        .update(schema.queueItem)
+        .set({ createdAt: new Date(Date.now() - 25 * 3600_000) });
+      expect((await add(u, { url: 'https://example.com/one-more', title: 'x' })).status).toBe(201);
+    });
+
+    it('requires sign-in (401) and Pro (402)', async () => {
+      expect((await add(undefined, { url: 'https://example.com/a', title: 't' })).status).toBe(401);
+      const u = await signUp(ctx.app, 'a@example.com');
+      await ctx.db
+        .update(schema.subscription)
+        .set({ trialEndsAt: new Date(Date.now() - 1000) })
+        .where(eq(schema.subscription.userId, u.id));
+      expect((await add(u, { url: 'https://example.com/a', title: 't' })).status).toBe(402);
     });
   });
 

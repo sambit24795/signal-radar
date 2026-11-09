@@ -3,8 +3,11 @@ import {
   buildSource,
   fetchAll,
   parseFeed,
+  parseDevto,
   parseGithub,
   parseHn,
+  parseLobsters,
+  parseMastodonLinks,
   parseRedditJson,
   resolveFeedUrl,
 } from '../src/index.js';
@@ -203,6 +206,94 @@ describe('youtube feed flakiness', () => {
     const src = buildSource(cfg({ type: 'rss', name: 'O', url: 'https://other.test/feed' }), {});
     await expect(src.fetch(makeCtx(f))).rejects.toThrow(/404/);
     expect(f.calls).toHaveLength(1);
+  });
+});
+
+describe('lobsters', () => {
+  it('parses hottest.json with score, comments and tags', async () => {
+    const items = parseLobsters(JSON.parse(fixture('lobsters-hottest.json')));
+    expect(items.length).toBeGreaterThan(3);
+    expect(items[0]).toMatchObject({ points: expect.any(Number), comments: expect.any(Number) });
+    expect(items[0]!.tags!.length).toBeGreaterThan(0);
+    expect(
+      parseLobsters([
+        { title: 'Ask', url: '', comments_url: 'https://lobste.rs/s/x/ask', score: 3 },
+      ]),
+    ).toMatchObject([{ url: 'https://lobste.rs/s/x/ask' }]);
+    const fetch = routedFetch({ 'lobste.rs': () => res(fixture('lobsters-hottest.json')) });
+    const src = buildSource(cfg({ type: 'lobsters' }), {});
+    expect(src.kind).toBe('lobsters');
+    expect((await src.fetch(makeCtx(fetch))).length).toBe(items.length);
+  });
+});
+
+describe('dev community', () => {
+  it('parses articles with reactions, comments and tag_list', async () => {
+    const items = parseDevto(JSON.parse(fixture('devto-top.json')));
+    expect(items.length).toBeGreaterThan(3);
+    expect(items[0]).toMatchObject({ points: expect.any(Number), author: expect.any(String) });
+    expect(items[0]!.tags!.length).toBeGreaterThan(0);
+    const fetch = routedFetch({ 'dev.to/api': () => res(fixture('devto-top.json')) });
+    const src = buildSource(cfg({ type: 'devto' }), {});
+    expect(src.kind).toBe('devto');
+    await src.fetch(makeCtx(fetch));
+    expect(fetch.calls[0]).toContain('top=1&per_page=30');
+  });
+});
+
+describe('mastodon trending links', () => {
+  it('uses the latest active day of history as momentum', async () => {
+    const items = parseMastodonLinks(JSON.parse(fixture('mastodon-links.json')));
+    expect(items.length).toBeGreaterThan(3);
+    expect(items[0]!.points).toBeGreaterThan(0);
+    expect(
+      parseMastodonLinks([
+        {
+          url: 'https://a.example/x',
+          title: 'x',
+          history: [
+            { day: '2', accounts: '0', uses: '0' },
+            { day: '1', accounts: '7', uses: '9' },
+          ],
+        },
+      ]),
+    ).toMatchObject([{ points: 7, comments: 9 }]);
+    const fetch = routedFetch({ 'mastodon.social': () => res(fixture('mastodon-links.json')) });
+    const src = buildSource(cfg({ type: 'mastodon' }), {});
+    expect(src.kind).toBe('mastodon');
+    await src.fetch(makeCtx(fetch));
+    expect(fetch.calls[0]).toContain('/api/v1/trends/links?limit=20');
+  });
+});
+
+describe('product hunt and youtube kinds', () => {
+  it('parses the Product Hunt Atom feed through the rss fetcher', () => {
+    const items = parseFeed(fixture('producthunt.atom'));
+    expect(items.length).toBeGreaterThan(2);
+    expect(items[0]!.url).toMatch(/^https:\/\/www\.producthunt\.com\//);
+    expect(items[0]!.snippet).not.toMatch(/</);
+    const src = buildSource(
+      cfg({ type: 'rss', name: 'Product Hunt', url: 'https://www.producthunt.com/feed' }),
+      {},
+    );
+    expect(src).toMatchObject({ id: 'rss:product-hunt', kind: 'rss' });
+  });
+
+  it('gives YouTube channel feeds their own kind', () => {
+    const yt = buildSource(
+      cfg({
+        type: 'rss',
+        name: 'Fireship (YouTube)',
+        url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UC1',
+      }),
+      {},
+    );
+    expect(yt.kind).toBe('youtube');
+    const other = buildSource(
+      cfg({ type: 'rss', name: 'Verge', url: 'https://www.theverge.com/rss/index.xml' }),
+      {},
+    );
+    expect(other.kind).toBe('rss');
   });
 });
 

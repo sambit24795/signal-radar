@@ -153,6 +153,11 @@ export function resolveFeedUrl(url: string, rsshubBase?: string): string | null 
   return rsshubBase.replace(/\/+$/, '') + '/' + url.slice('rsshub:'.length).replace(/^\/+/, '');
 }
 
+/** YouTube channel feeds (direct, or via RSSHub) get their own kind so videos can be filtered apart. */
+function isYoutubeFeed(url: string): boolean {
+  return /youtube\.com\/feeds\//i.test(url) || url.startsWith('rsshub:/youtube/');
+}
+
 export function createRss(cfg: RssConfig, opts: BuildOptions): Source {
   const resolved = resolveFeedUrl(cfg.url, opts.rsshubBase);
   const status = !cfg.enabled
@@ -163,7 +168,7 @@ export function createRss(cfg: RssConfig, opts: BuildOptions): Source {
   return {
     id: cfg.id ?? `rss:${cfg.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     name: cfg.name,
-    kind: 'rss',
+    kind: isYoutubeFeed(cfg.url) ? 'youtube' : 'rss',
     alwaysInclude: cfg.alwaysInclude,
     status,
     async fetch(ctx: SourceContext) {

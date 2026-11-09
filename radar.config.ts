@@ -114,6 +114,9 @@ export default defineConfig({
 
   sources: [
     { type: 'hn' },
+    { type: 'lobsters' },
+    { type: 'devto' },
+    { type: 'mastodon' },
     { type: 'reddit', subreddits },
     {
       type: 'github',
@@ -122,6 +125,7 @@ export default defineConfig({
     },
     { type: 'rss', name: 'GamingOnLinux', url: 'https://www.gamingonlinux.com/article_rss.php' },
     { type: 'rss', name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
+    { type: 'rss', name: 'Product Hunt', url: 'https://www.producthunt.com/feed' },
     {
       type: 'rss',
       name: 'Fireship (YouTube)',

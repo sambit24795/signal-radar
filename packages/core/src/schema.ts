@@ -1,6 +1,15 @@
 import { z } from 'zod';
 
-export const SourceKindSchema = z.enum(['hn', 'reddit', 'github', 'rss']);
+export const SourceKindSchema = z.enum([
+  'hn',
+  'reddit',
+  'github',
+  'rss',
+  'youtube',
+  'lobsters',
+  'devto',
+  'mastodon',
+]);
 export type SourceKind = z.infer<typeof SourceKindSchema>;
 
 export const MediaTypeSchema = z.enum(['article', 'video', 'short', 'repo', 'social']);
@@ -113,6 +122,22 @@ export const SourceConfigSchema = z.discriminatedUnion('type', [
     topics: z.array(z.string()).min(1),
     daysBack: z.number().positive().default(7),
     perTopic: z.number().int().positive().default(15),
+  }),
+  z.object({
+    ...sourceBase,
+    type: z.literal('lobsters'),
+  }),
+  z.object({
+    ...sourceBase,
+    type: z.literal('devto'),
+    perPage: z.number().int().positive().max(1000).default(30),
+  }),
+  z.object({
+    ...sourceBase,
+    type: z.literal('mastodon'),
+    /** Instance whose trending links to read (public, keyless). */
+    instance: z.string().default('mastodon.social'),
+    limit: z.number().int().positive().max(40).default(20),
   }),
   z.object({
     ...sourceBase,

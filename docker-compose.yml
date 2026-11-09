@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radar
+      POSTGRES_DB: radar
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U radar -d radar']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rsshub:
+    image: diygod/rsshub:latest
+    profiles: [rsshub]
+    restart: unless-stopped
+    ports:
+      - '1200:1200'
+    environment:
+      NODE_ENV: production
+
+volumes:
+  pgdata:

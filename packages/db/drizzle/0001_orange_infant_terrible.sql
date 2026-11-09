@@ -1,0 +1,1 @@
+ALTER TABLE "user_config" ADD COLUMN "custom_feeds" jsonb DEFAULT '[]'::jsonb NOT NULL;

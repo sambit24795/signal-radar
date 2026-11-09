@@ -85,6 +85,16 @@ function mediaTypeFor(url: string, entry: Node, override?: MediaType): MediaType
   return 'article';
 }
 
+/** The feed's own title (RSS channel, Atom feed or RDF channel), or null. */
+export function parseFeedTitle(xml: string): string | null {
+  const doc = parser.parse(xml) as Node;
+  const channel = (doc['rss'] as Node | undefined)?.['channel'] as Node | undefined;
+  const rdfChannel = (doc['rdf:RDF'] as Node | undefined)?.['channel'] as Node | undefined;
+  const atom = doc['feed'] as Node | undefined;
+  const t = stripHtml(text((channel ?? atom ?? rdfChannel)?.['title']));
+  return t ? truncate(t, 120) : null;
+}
+
 export interface ParseFeedOptions {
   mediaType?: MediaType | undefined;
   tags?: string[] | undefined;

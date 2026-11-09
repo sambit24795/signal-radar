@@ -8,6 +8,13 @@
       "when": 1794225919176,
       "tag": "0000_bizarre_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794232522617,
+      "tag": "0001_orange_infant_terrible",
+      "breakpoints": true
     }
   ]
 }

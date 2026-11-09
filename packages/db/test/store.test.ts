@@ -54,6 +54,14 @@ describe.skipIf(!available)('createPgStore + runForUsers', () => {
     expect(users.map((u) => u.id).sort()).toEqual(['active', 'canceled', 'trial']);
   });
 
+  it('lists a user custom feeds', async () => {
+    await addUser('ann', { status: 'active' });
+    const feeds = [{ id: 'custom:abc', url: 'https://a.example/rss', title: 'A' }];
+    await db.update(schema.userConfig).set({ customFeeds: feeds });
+    const [u] = await createPgStore(db).listProUsers(NOW);
+    expect(u?.customFeeds).toEqual(feeds);
+  });
+
   it('writes feed_item, queue_item and seen; a second run adds nothing', async () => {
     await addUser('ann', { status: 'trialing', trialEndsAt: future });
     await addUser('bob', { status: 'active' }, []);

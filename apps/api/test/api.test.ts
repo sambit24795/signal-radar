@@ -1,15 +1,35 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { customFeedId } from '@radar/core';
 import { schema } from '@radar/db';
 import radarConfig from '../../../radar.config.js';
 import { call, dbAvailable, setup, sign, signUp, type Json } from './helpers.js';
+
+const RSS = `<?xml version="1.0"?><rss version="2.0"><channel><title>Space Weekly</title>
+<item><title>Artemis slips</title><link>https://space.example/a</link></item>
+<item><title>Starship flight 12</title><link>https://space.example/b</link></item>
+<item><title>Comet spotted</title><link>https://space.example/c</link></item>
+<item><title>Fourth story</title><link>https://space.example/d</link></item></channel></rss>`;
+
+const netFetch = async (url: string): Promise<Response> => {
+  const host = new URL(url).hostname;
+  if (host === 'space.example') return new Response(RSS);
+  if (host === 'redir.example') {
+    return new Response('', { status: 302, headers: { location: 'http://169.254.169.254/' } });
+  }
+  if (host === 'html.example') return new Response('<html><body>hi</body></html>');
+  if (host === 'down.example') return new Response('', { status: 503 });
+  throw new Error(`unexpected fetch ${url}`);
+};
+const netResolve = async (host: string) =>
+  host === 'private.example' ? ['10.0.0.1'] : ['93.184.216.34'];
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 
 describe.skipIf(!dbAvailable)('api', () => {
   let ctx: Ctx;
   beforeAll(async () => {
-    ctx = await setup();
+    ctx = await setup({}, { fetch: netFetch, resolve: netResolve });
   });
   afterAll(async () => {
     await ctx?.close();
@@ -188,6 +208,116 @@ describe.skipIf(!dbAvailable)('api', () => {
       });
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: 'invalid JSON body' });
+    });
+  });
+
+  describe('custom feeds', () => {
+    const feedId = (url: string) => customFeedId(url);
+    const baseCfg = { niches: [], sources: [], topN: 5, telegramChatId: null, notion: null };
+    const put = (u: Awaited<ReturnType<typeof signUp>>, customFeeds?: unknown) =>
+      call(ctx.app, '/api/me/config', {
+        method: 'PUT',
+        user: u,
+        json: customFeeds === undefined ? baseCfg : { ...baseCfg, customFeeds },
+      });
+    const check = (u: Awaited<ReturnType<typeof signUp>> | undefined, url: string) =>
+      call(ctx.app, '/api/me/feeds/check', {
+        method: 'POST',
+        ...(u ? { user: u } : {}),
+        json: { url },
+      });
+
+    it('check returns title, count and a 3-title sample', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const res = await check(u, 'https://space.example/rss');
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Json;
+      expect(body).toMatchObject({
+        id: feedId('https://space.example/rss'),
+        url: 'https://space.example/rss',
+        title: 'Space Weekly',
+        itemCount: 4,
+        sample: ['Artemis slips', 'Starship flight 12', 'Comet spotted'],
+      });
+    });
+
+    it('check prepends https:// to a bare host', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const body = (await (await check(u, 'space.example/rss')).json()) as Json;
+      expect(body.url).toBe('https://space.example/rss');
+    });
+
+    it('check needs auth and Pro', async () => {
+      expect((await check(undefined, 'https://space.example/rss')).status).toBe(401);
+      const u = await signUp(ctx.app, 'ann@example.com');
+      await ctx.db
+        .update(schema.subscription)
+        .set({ status: 'none', trialEndsAt: null })
+        .where(eq(schema.subscription.userId, u.id));
+      expect((await check(u, 'https://space.example/rss')).status).toBe(402);
+    });
+
+    it('check rejects unsafe or unreadable URLs with a clear 400', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      for (const url of [
+        'ftp://space.example/rss',
+        'http://127.0.0.1/rss',
+        'http://169.254.169.254/latest',
+        'http://[::1]/rss',
+        'https://private.example/rss',
+        'https://redir.example/rss',
+        'https://html.example/page',
+        'https://down.example/rss',
+      ]) {
+        const res = await check(u, url);
+        expect(res.status, url).toBe(400);
+        expect(((await res.json()) as Json).error, url).toBeTruthy();
+      }
+    });
+
+    it('saves valid feeds and keeps them when customFeeds is omitted', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const url = 'https://space.example/rss';
+      const feeds = [{ id: feedId(url), url, title: 'Space Weekly' }];
+      const res = await put(u, feeds);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as Json).config.customFeeds).toEqual(feeds);
+      const kept = (await (await put(u)).json()) as Json;
+      expect(kept.config.customFeeds).toEqual(feeds);
+      const cleared = (await (await put(u, [])).json()) as Json;
+      expect(cleared.config.customFeeds).toEqual([]);
+    });
+
+    it('validates url, id, duplicates and the max of 15', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const mk = (url: string) => ({ id: feedId(url), url, title: 't' });
+      const many = Array.from({ length: 16 }, (_, i) => mk(`https://f${i}.example/rss`));
+      const cases: [string, unknown][] = [
+        ['url', [mk('http://10.0.0.1/rss')]],
+        ['url', [mk('ftp://a.example/rss')]],
+        ['url', [mk('not a url')]],
+        ['id', [{ id: 'custom:deadbeef00', url: 'https://a.example/rss', title: 't' }]],
+        ['duplicate', [mk('https://a.example/rss'), mk('https://a.example/rss')]],
+        ['customFeeds', many],
+        ['title', [{ ...mk('https://a.example/rss'), title: '' }]],
+      ];
+      for (const [needle, feeds] of cases) {
+        const res = await put(u, feeds);
+        expect(res.status, needle).toBe(400);
+        expect(((await res.json()) as Json).error).toContain(needle);
+      }
+      expect((await put(u, many.slice(0, 15))).status).toBe(200);
+    });
+
+    it('402s saving feeds without Pro, but still allows clearing them', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      await ctx.db
+        .update(schema.subscription)
+        .set({ status: 'none', trialEndsAt: null })
+        .where(eq(schema.subscription.userId, u.id));
+      const url = 'https://space.example/rss';
+      expect((await put(u, [{ id: feedId(url), url, title: 'x' }])).status).toBe(402);
+      expect((await put(u, [])).status).toBe(200);
     });
   });
 

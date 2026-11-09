@@ -120,6 +120,13 @@ export interface NicheConfig {
   keywords: (string | { term: string; weight?: number })[];
 }
 
+/** A user-supplied RSS/Atom feed. `id` is `custom:<short hash of url>`. */
+export interface CustomFeedConfig {
+  id: string;
+  url: string;
+  title: string;
+}
+
 export interface NotionConfig {
   token: string;
   dbId: string;
@@ -133,6 +140,7 @@ export const userConfig = pgTable('user_config', {
   /** Enabled source ids. */
   sources: jsonb('sources').$type<string[]>().notNull().default([]),
   topN: integer('top_n').notNull().default(10),
+  customFeeds: jsonb('custom_feeds').$type<CustomFeedConfig[]>().notNull().default([]),
   telegramChatId: text('telegram_chat_id'),
   notion: jsonb('notion').$type<NotionConfig | null>(),
   updatedAt: timestamp('updated_at', { withTimezone: true })

@@ -1,5 +1,8 @@
 import { sendDigest } from './digest/telegram.js';
+import { mapLimit } from './concurrency.js';
 import { createFetch, type FetchFn } from './http.js';
+import { fetchPublicText, type Resolver } from './netguard.js';
+import { normalizeItem } from './normalize.js';
 import {
   createNotionClient,
   resolveDataSourceId,
@@ -9,8 +12,16 @@ import {
 import { collectItems, type SourceResult } from './pipeline.js';
 import { prefilter } from './prefilter.js';
 import { rank } from './rank.js';
-import type { Item, Niche, RadarConfig, ScoredItem } from './schema.js';
+import type { Item, Niche, RadarConfig, RawItem, ScoredItem } from './schema.js';
 import { createProvider, scoreItems, type Enriched, type Feedback } from './score/index.js';
+import { parseFeed } from './sources/rss.js';
+
+/** A feed URL a Pro user added themselves. */
+export interface CustomFeed {
+  id: string;
+  url: string;
+  title: string;
+}
 
 /** A Pro user the run works for. */
 export interface RadarUser {
@@ -20,6 +31,8 @@ export interface RadarUser {
   /** Enabled source ids; empty means every configured source. */
   sources: string[];
   topN: number;
+  /** Their own RSS/Atom feeds; items reach only this user's candidate pool. */
+  customFeeds?: CustomFeed[];
   telegramChatId?: string | null;
   notion?: { token: string; dbId: string } | null;
 }
@@ -46,6 +59,8 @@ export interface MultiRunOptions {
   env?: Record<string, string | undefined>;
   /** Overrides the HTTP client for sources, the LLM and Telegram (tests). */
   fetch?: FetchFn;
+  /** Overrides DNS resolution for custom feeds (tests). */
+  resolve?: Resolver;
   /** Overrides the Notion client factory (tests). */
   notion?: (token: string) => NotionLike;
   now?: Date;
@@ -79,6 +94,31 @@ export interface MultiRunResult {
   warnings: string[];
 }
 
+const CUSTOM_FEED_CONCURRENCY = 4;
+
+/** Fetch each distinct custom feed URL once. Failures are logged and yield no items. */
+async function fetchCustomFeeds(
+  users: RadarUser[],
+  fetchFn: FetchFn,
+  resolve: Resolver | undefined,
+  warn: (m: string) => void,
+): Promise<Map<string, RawItem[]>> {
+  const urls = [...new Set(users.flatMap((u) => (u.customFeeds ?? []).map((f) => f.url)))];
+  const out = new Map<string, RawItem[]>();
+  await mapLimit(urls, CUSTOM_FEED_CONCURRENCY, async (url) => {
+    try {
+      const { text } = await fetchPublicText(url, {
+        fetch: fetchFn,
+        ...(resolve ? { resolve } : {}),
+      });
+      out.set(url, parseFeed(text));
+    } catch (e) {
+      warn(`custom feed ${url}: ${(e as Error).message}`);
+    }
+  });
+  return out;
+}
+
 /** Does a missing `ai` verdict or a "skip" format keep the item out of the queue? */
 const queueable = (i: Enriched) => i.ai?.format !== 'skip';
 
@@ -107,6 +147,9 @@ export async function runForUsers(
   const provider = createProvider(config, env, warn, opts.fetch);
   const fetchFn = opts.fetch ?? createFetch(config.fetchTimeoutMs);
   const users = (await store.listProUsers(now)).filter((u) => u.niches.length > 0);
+  // Custom feeds: each distinct URL fetched once, never written to the public feed.
+  const customRaw = await fetchCustomFeeds(users, fetchFn, opts.resolve, warn);
+  const sharedIds = new Set(collected.items.map((i) => i.id));
   const out: UserRunResult[] = [];
 
   for (const user of users) {
@@ -124,9 +167,20 @@ export async function runForUsers(
     const uwarn = (m: string) => warn(`${user.email ?? user.id}: ${m}`);
     try {
       const wanted = new Set(user.sources);
-      const mine = collected.items.filter(
+      const shared = collected.items.filter(
         (i) => wanted.size === 0 || wanted.has(collected.sourceIds.get(i.id) ?? ''),
       );
+      const ownIds = new Set(sharedIds);
+      const own: Item[] = [];
+      for (const feed of user.customFeeds ?? []) {
+        for (const raw of customRaw.get(feed.url) ?? []) {
+          const item = normalizeItem(raw, { name: feed.title, kind: 'rss' }, now);
+          if (!item || ownIds.has(item.id)) continue;
+          ownIds.add(item.id);
+          own.push(item);
+        }
+      }
+      const mine = [...shared, ...own];
       const seen = await store.seenUrls(
         user.id,
         mine.map((i) => i.url),

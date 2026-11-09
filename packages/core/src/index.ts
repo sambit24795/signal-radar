@@ -1,5 +1,6 @@
 export * from './schema.js';
 export * from './http.js';
+export * from './netguard.js';
 export * from './url.js';
 export * from './normalize.js';
 export * from './dedupe.js';

@@ -55,6 +55,7 @@ export function createPgStore(db: Db): RadarStore {
         })),
         sources: cfg.sources,
         topN: cfg.topN,
+        customFeeds: cfg.customFeeds,
         telegramChatId: cfg.telegramChatId,
         notion: cfg.notion,
       }));

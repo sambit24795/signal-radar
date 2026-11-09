@@ -1,16 +1,51 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { NicheSchema } from '@radar/core';
+import {
+  assertPublicUrlSyntax,
+  customFeedId,
+  fetchPublicText,
+  NicheSchema,
+  parseFeed,
+  parseFeedTitle,
+  UnsafeUrlError,
+} from '@radar/core';
 import { schema } from '@radar/db';
 import type { AppVars, RouteDeps } from '../app.js';
 import { badRequest, isPro, parseBody } from '../http.js';
-import { requireAuth } from '../middleware.js';
+import { requireAuth, requirePro } from '../middleware.js';
+
+export const MAX_CUSTOM_FEEDS = 15;
+
+const CustomFeedSchema = z
+  .object({
+    id: z.string(),
+    url: z.string().max(2000),
+    title: z.string().trim().min(1).max(120),
+  })
+  .superRefine((f, ctx) => {
+    try {
+      assertPublicUrlSyntax(f.url);
+    } catch (e) {
+      ctx.addIssue({ code: 'custom', path: ['url'], message: (e as Error).message });
+      return;
+    }
+    if (f.id !== customFeedId(f.url)) {
+      ctx.addIssue({ code: 'custom', path: ['id'], message: 'must be custom:<hash of url>' });
+    }
+  });
 
 const ConfigBody = z.object({
   niches: z.array(NicheSchema).max(20),
   sources: z.array(z.string().min(1)).max(100),
   topN: z.number().int().min(1).max(50),
+  /** Pro only. Omitted keeps the stored feeds. */
+  customFeeds: z
+    .array(CustomFeedSchema)
+    .max(MAX_CUSTOM_FEEDS)
+    .refine((fs) => new Set(fs.map((f) => f.id)).size === fs.length, 'duplicate feed URL')
+    .optional(),
   telegramChatId: z.string().min(1).nullable(),
   /** `token` may be omitted to keep the stored one. */
   notion: z.object({ token: z.string().min(1).optional(), dbId: z.string().min(1) }).nullable(),
@@ -62,7 +97,14 @@ export function meRoutes(deps: RouteDeps) {
 
   r.put('/config', async (c) => {
     const userId = c.get('user').id;
-    const { notion: notionIn, ...body } = await parseBody(c, ConfigBody);
+    const { notion: notionIn, customFeeds, ...body } = await parseBody(c, ConfigBody);
+    if (customFeeds && customFeeds.length > 0) {
+      const [sub] = await db
+        .select()
+        .from(schema.subscription)
+        .where(eq(schema.subscription.userId, userId));
+      if (!isPro(sub)) return c.json({ error: 'Custom feeds need Pro' }, 402);
+    }
     const [existing] = await db
       .select({ notion: schema.userConfig.notion })
       .from(schema.userConfig)
@@ -70,13 +112,39 @@ export function meRoutes(deps: RouteDeps) {
     const token = notionIn?.token ?? existing?.notion?.token;
     if (notionIn && !token) return badRequest('notion.token: required the first time');
     const notion = notionIn && token ? { token, dbId: notionIn.dbId } : null;
-    const values = { ...body, notion };
+    const values = { ...body, ...(customFeeds ? { customFeeds } : {}), notion };
     const [cfg] = await db
       .insert(schema.userConfig)
       .values({ userId, ...values })
       .onConflictDoUpdate({ target: schema.userConfig.userId, set: values })
       .returning();
     return c.json({ config: cfg && publicConfig(cfg) });
+  });
+
+  r.post('/feeds/check', requirePro(deps), async (c) => {
+    const { url } = await parseBody(c, z.object({ url: z.string().trim().min(1).max(2000) }));
+    const candidate = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+    try {
+      const target = assertPublicUrlSyntax(candidate);
+      const { text, url: finalUrl } = await fetchPublicText(target.href, {
+        ...(deps.net?.fetch ? { fetch: deps.net.fetch } : {}),
+        ...(deps.net?.resolve ? { resolve: deps.net.resolve } : {}),
+      });
+      const items = parseFeed(text);
+      if (items.length === 0) return badRequest('No feed items found at that URL');
+      const feedTitle = parseFeedTitle(text) ?? new URL(finalUrl).hostname;
+      return c.json({
+        id: customFeedId(target.href),
+        url: target.href,
+        title: feedTitle,
+        itemCount: items.length,
+        sample: items.slice(0, 3).map((i) => i.title),
+      });
+    } catch (e) {
+      if (e instanceof HTTPException) throw e;
+      if (e instanceof UnsafeUrlError) return badRequest(e.message);
+      return badRequest(`Could not read a feed from that URL: ${(e as Error).message}`);
+    }
   });
 
   return r;

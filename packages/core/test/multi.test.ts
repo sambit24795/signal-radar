@@ -214,4 +214,75 @@ describe('runForUsers', () => {
     expect(fetch.calls.some((u) => u.includes('deepseek'))).toBe(false);
     expect(m.queue.get('ann')?.every((i) => !i.ai)).toBe(true);
   });
+
+  describe('custom feeds', () => {
+    const nvidia: RadarUser['niches'] = [
+      { id: 'ai', name: 'AI', weight: 1, keywords: ['nvidia', 'steam frame'] },
+    ];
+    const feedOf = (id: string, host: string) => ({
+      id: `custom:${id}`,
+      url: `https://${host}/rss`,
+      title: `${host} feed`,
+    });
+    const publicDns = async () => ['93.184.216.34'];
+
+    it('fetches each custom url once and routes items only to the owners', async () => {
+      const fetch = routedFetch({
+        'verge.example': () => res(fixture('verge.xml')),
+        'broken.example': () => res('', 500),
+        'gol.test': () => res(fixture('gol.xml')),
+        'other.test': () => res('', 500),
+        'api.deepseek.com': () => res(reply(0)),
+        'api.telegram.org': () => res('{"ok":true}'),
+      });
+      const mine = feedOf('verge', 'verge.example');
+      const m = memoryStore([
+        user('ann'),
+        user('bob', { niches: nvidia, customFeeds: [mine] }),
+        user('cat', { niches: nvidia, customFeeds: [mine, feedOf('bad', 'broken.example')] }),
+        user('dan', { niches: nvidia }),
+      ]);
+      const out = await runForUsers(config, m.store, {
+        env,
+        fetch,
+        now: NOW,
+        resolve: publicDns,
+      });
+
+      expect(fetch.calls.filter((u) => u.includes('verge.example'))).toHaveLength(1);
+      const nvidiaTitles = (id: string) =>
+        (m.queue.get(id) ?? []).filter((i) => /Nvidia/.test(i.title));
+      expect(nvidiaTitles('bob').length).toBeGreaterThan(0);
+      expect(nvidiaTitles('cat')).toHaveLength(nvidiaTitles('bob').length);
+      expect(nvidiaTitles('bob')[0]?.source).toBe('verge.example feed');
+      expect(nvidiaTitles('ann')).toHaveLength(0);
+      expect(nvidiaTitles('dan')).toHaveLength(0);
+      // never in the public feed
+      expect(m.feed.some((i) => /Nvidia/.test(i.title))).toBe(false);
+      // a broken custom feed is logged and does not stop anyone
+      expect(out.warnings.some((w) => w.includes('broken.example'))).toBe(true);
+      expect(out.users.every((u) => !u.error)).toBe(true);
+    });
+
+    it('refuses custom feeds that resolve to private addresses', async () => {
+      const fetch = routedFetch({
+        'evil.example': () => res(fixture('verge.xml')),
+        'gol.test': () => res(fixture('gol.xml')),
+        'other.test': () => res('', 500),
+        'api.deepseek.com': () => res(reply(0)),
+      });
+      const m = memoryStore([
+        user('bob', { niches: nvidia, customFeeds: [feedOf('e', 'evil.example')] }),
+      ]);
+      const out = await runForUsers(config, m.store, {
+        env,
+        fetch,
+        now: NOW,
+        resolve: async () => ['10.0.0.5'],
+      });
+      expect(fetch.calls.some((u) => u.includes('evil.example'))).toBe(false);
+      expect(out.warnings.some((w) => w.includes('evil.example'))).toBe(true);
+      expect((m.queue.get('bob') ?? []).some((i) => /Nvidia/.test(i.title))).toBe(false);
+    });
+  });
 });

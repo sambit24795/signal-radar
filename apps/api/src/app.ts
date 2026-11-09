@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
+import type { FetchFn, Resolver } from '@radar/core';
 import type { Db } from '@radar/db';
 import { createAuth, type Auth } from './auth.js';
 import type { ApiEnv } from './env.js';
@@ -15,6 +16,8 @@ import { devRoutes } from './routes/dev.js';
 export interface AppDeps {
   db: Db;
   env: ApiEnv;
+  /** Outbound HTTP for user-supplied feed URLs; defaults to real fetch and DNS (tests inject). */
+  net?: { fetch?: FetchFn; resolve?: Resolver };
 }
 
 export type AuthUser = Auth['$Infer']['Session']['user'];
@@ -28,9 +31,9 @@ export interface RouteDeps extends AppDeps {
   auth: Auth;
 }
 
-export function createApp({ db, env }: AppDeps) {
+export function createApp({ db, env, net }: AppDeps) {
   const auth = createAuth(db, env);
-  const deps: RouteDeps = { db, env, auth };
+  const deps: RouteDeps = { db, env, auth, ...(net ? { net } : {}) };
   const app = new Hono<AppVars>();
 
   app.use('/api/*', cors({ origin: env.WEB_ORIGIN, credentials: true }));

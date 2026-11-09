@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { createApp } from '../src/app.js';
+import { createApp, type AppDeps } from '../src/app.js';
 import { parseEnv } from '../src/env.js';
 import { openTestDb, resetTestDb, testDbAvailable } from '@radar/db/testing';
 import type { Db } from '@radar/db';
@@ -9,7 +9,10 @@ export const WEBHOOK_SECRET = 'whsec_test_secret';
 
 export const dbAvailable = await testDbAvailable();
 
-export async function setup(overrides: Record<string, string | undefined> = {}) {
+export async function setup(
+  overrides: Record<string, string | undefined> = {},
+  net?: AppDeps['net'],
+) {
   const db: Db = await openTestDb();
   const env = parseEnv({
     BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-1234',
@@ -19,7 +22,7 @@ export async function setup(overrides: Record<string, string | undefined> = {}) 
     NODE_ENV: 'test',
     ...overrides,
   });
-  const app = createApp({ db, env });
+  const app = createApp({ db, env, ...(net ? { net } : {}) });
   return { db, app, reset: () => resetTestDb(db), close: () => db.$client.end({ timeout: 1 }) };
 }
 

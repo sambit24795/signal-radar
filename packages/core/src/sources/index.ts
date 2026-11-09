@@ -9,7 +9,7 @@ export type { BuildOptions, Source, SourceContext, SourceStatus } from './types.
 export { parseHn } from './hn.js';
 export { parseRedditJson } from './reddit.js';
 export { parseGithub } from './github.js';
-export { parseFeed, resolveFeedUrl } from './rss.js';
+export { parseFeed, parseFeedTitle, resolveFeedUrl } from './rss.js';
 
 type Factories = {
   [T in SourceConfig['type']]: (

@@ -2,8 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Signal Radar</title>
+    <meta name="description" content="A ranked radar of what is moving in the niches you follow." />
+    <meta name="theme-color" content="#f7f7f4" />
+    <link rel="icon" href="/icons/mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <script>
+      // Set the theme before first paint so a saved choice never flashes the other one.
+      try {
+        var t = JSON.parse(localStorage.getItem('signal-radar:prefs') || '{}').theme;
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

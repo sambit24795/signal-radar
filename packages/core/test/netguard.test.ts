@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { gzipSync } from 'node:zlib';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   assertPublicUrl,
   assertPublicUrlSyntax,
+  createPinnedFetch,
   customFeedId,
   fetchPublicText,
   isBlockedIp,
@@ -195,5 +199,46 @@ describe('customFeedId', () => {
     expect(customFeedId('https://a.example/rss')).toMatch(/^custom:[0-9a-f]{10}$/);
     expect(customFeedId('https://a.example/rss')).toBe(customFeedId('https://a.example/rss'));
     expect(customFeedId('https://a.example/rss')).not.toBe(customFeedId('https://b.example/rss'));
+  });
+});
+
+describe('pinned fetch (DNS rebinding)', () => {
+  let server: Server;
+  let port = 0;
+  let hits = 0;
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      hits++;
+      if (req.url === '/gz') {
+        res.writeHead(200, { 'content-type': 'application/rss+xml', 'content-encoding': 'gzip' });
+        res.end(gzipSync('<rss>zipped</rss>'));
+      } else res.end('<rss>plain</rss>');
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    port = (server.address() as AddressInfo).port;
+  });
+  afterAll(() => new Promise<void>((r) => server.close(() => r())));
+
+  it('refuses a host that rebinds to a private address after the pre-check', async () => {
+    let calls = 0;
+    const rebinding = async () => (calls++ === 0 ? ['93.184.216.34'] : ['127.0.0.1']);
+    const before = hits;
+    await expect(
+      fetchPublicText(`http://rebind.example:${port}/`, { resolve: rebinding }),
+    ).rejects.toBeInstanceOf(UnsafeUrlError);
+    expect(calls).toBe(2); // pre-check, then the connect-time lookup
+    expect(hits).toBe(before); // never connected
+  });
+
+  it('connects to the address it checked and decodes gzip', async () => {
+    const f = createPinnedFetch(
+      async () => ['127.0.0.1'],
+      () => false,
+    );
+    const plain = await f(`http://feed.example:${port}/`);
+    expect(await plain.text()).toBe('<rss>plain</rss>');
+    const gz = await f(`http://feed.example:${port}/gz`);
+    expect(gz.headers.get('content-encoding')).toBeNull();
+    expect(await gz.text()).toBe('<rss>zipped</rss>');
   });
 });

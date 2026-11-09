@@ -116,7 +116,7 @@ const CUSTOM_FEED_CONCURRENCY = 4;
 /** Fetch each distinct custom feed URL once. Failures are logged and yield no items. */
 async function fetchCustomFeeds(
   users: RadarUser[],
-  fetchFn: FetchFn,
+  fetchFn: FetchFn | undefined,
   resolve: Resolver | undefined,
   warn: (m: string) => void,
 ): Promise<Map<string, RawItem[]>> {
@@ -125,7 +125,7 @@ async function fetchCustomFeeds(
   await mapLimit(urls, CUSTOM_FEED_CONCURRENCY, async (url) => {
     try {
       const { text } = await fetchPublicText(url, {
-        fetch: fetchFn,
+        ...(fetchFn ? { fetch: fetchFn } : {}),
         ...(resolve ? { resolve } : {}),
       });
       out.set(url, parseFeed(text));
@@ -166,7 +166,7 @@ export async function runForUsers(
   const pushSender = opts.push === undefined ? createPushSender(env) : opts.push;
   const users = (await store.listProUsers(now)).filter((u) => u.niches.length > 0);
   // Custom feeds: each distinct URL fetched once, never written to the public feed.
-  const customRaw = await fetchCustomFeeds(users, fetchFn, opts.resolve, warn);
+  const customRaw = await fetchCustomFeeds(users, opts.fetch, opts.resolve, warn);
   const sharedIds = new Set(collected.items.map((i) => i.id));
   const out: UserRunResult[] = [];
 

@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
-import { createFetch, HttpError, USER_AGENT, type FetchFn } from './http.js';
+import http from 'node:http';
+import https from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
+import { Readable } from 'node:stream';
+import zlib from 'node:zlib';
+import { HttpError, USER_AGENT, type FetchFn } from './http.js';
 
 /** Resolves a hostname to every address it points at. Injectable for tests. */
 export type Resolver = (host: string) => Promise<string[]>;
@@ -154,7 +158,92 @@ export async function assertPublicUrl(raw: string, resolve: Resolver = resolveHo
   return u;
 }
 
+/**
+ * A DNS lookup for sockets that refuses private addresses. Because the check runs inside the
+ * connection's own lookup, the address that was checked is the address that gets dialed
+ * (no DNS-rebinding window between a pre-check and the connect).
+ */
+function guardedLookup(resolve: Resolver, blocked: (ip: string) => boolean): LookupFunction {
+  return (hostname, options, callback) => {
+    const host = hostname.replace(/^\[|\]$/g, '');
+    const fail = (e: Error) => callback(e, '', 0);
+    (isIP(host) ? Promise.resolve([host]) : resolve(host)).then(
+      (addrs) => {
+        if (addrs.length === 0) return fail(new UnsafeUrlError(`could not resolve ${host}`));
+        if (addrs.some(blocked)) {
+          return fail(new UnsafeUrlError('that host resolves to a private address'));
+        }
+        const list = addrs.map((address) => ({ address, family: isIP(address) }));
+        if (options.all) callback(null, list);
+        else callback(null, list[0]!.address, list[0]!.family);
+      },
+      () => fail(new UnsafeUrlError(`could not resolve ${host}`)),
+    );
+  };
+}
+
+function decoded(res: http.IncomingMessage): Readable {
+  switch (String(res.headers['content-encoding'] ?? '').toLowerCase()) {
+    case 'gzip':
+    case 'x-gzip':
+      return res.pipe(zlib.createGunzip());
+    case 'deflate':
+      return res.pipe(zlib.createInflate());
+    case 'br':
+      return res.pipe(zlib.createBrotliDecompress());
+    default:
+      return res;
+  }
+}
+
+/**
+ * A fetch for user-supplied URLs that validates DNS at connect time and never follows redirects
+ * (callers re-check each hop). `blocked` is injectable for tests only.
+ */
+export function createPinnedFetch(
+  resolve: Resolver = resolveHost,
+  blocked: (ip: string) => boolean = isBlockedIp,
+): FetchFn {
+  const lookup = guardedLookup(resolve, blocked);
+  return (url, init) =>
+    new Promise<Response>((ok, fail) => {
+      const u = new URL(url);
+      const mod = u.protocol === 'https:' ? https : http;
+      const headers = new Headers(init?.headers);
+      headers.set('accept-encoding', 'gzip, deflate, br');
+      const req = mod.request(
+        u,
+        {
+          method: init?.method ?? 'GET',
+          headers: Object.fromEntries(headers),
+          lookup,
+          agent: false,
+          ...(init?.signal ? { signal: init.signal } : {}),
+        },
+        (res) => {
+          const status = res.statusCode ?? 502;
+          const out = new Headers();
+          for (const [k, v] of Object.entries(res.headers)) {
+            for (const x of Array.isArray(v) ? v : v === undefined ? [] : [v]) out.append(k, x);
+          }
+          const encoded = out.has('content-encoding');
+          if (encoded) {
+            out.delete('content-encoding');
+            out.delete('content-length');
+          }
+          const empty = status === 204 || status === 304 || init?.method === 'HEAD';
+          if (empty) res.resume();
+          const body = empty ? null : (Readable.toWeb(decoded(res)) as ReadableStream<Uint8Array>);
+          ok(new Response(body, { status, headers: out }));
+        },
+      );
+      req.on('error', fail);
+      req.end();
+    });
+}
+
 export interface SafeFetchOptions {
+  /** Overrides the pinned fetch (tests only: a custom fetch skips the connect-time DNS check). */
   fetch?: FetchFn;
   resolve?: Resolver;
   timeoutMs?: number;
@@ -201,7 +290,7 @@ export async function fetchPublicText(
   const timeoutMs = opts.timeoutMs ?? SAFE_TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? SAFE_MAX_BYTES;
   const maxRedirects = opts.maxRedirects ?? SAFE_MAX_REDIRECTS;
-  const base = opts.fetch ?? createFetch(timeoutMs);
+  const base = opts.fetch ?? createPinnedFetch(opts.resolve);
   const signal = AbortSignal.timeout(timeoutMs);
   const headers = {
     'user-agent': USER_AGENT,

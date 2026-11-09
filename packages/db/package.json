@@ -12,6 +12,7 @@
     "migrate": "tsx --env-file-if-exists=../../.env src/migrate-cli.ts"
   },
   "dependencies": {
+    "@radar/core": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "postgres": "^4.1.0"
   },

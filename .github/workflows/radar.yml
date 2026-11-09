@@ -1,3 +1,5 @@
+# OUTDATED (phase 1): `radar run` now targets Postgres per user; the single-user seen.json + Notion path is
+# `radar run --local`. This workflow is redone in phase 5 and will fail at "Run radar" until then.
 name: Radar
 
 on:

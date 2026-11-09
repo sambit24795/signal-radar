@@ -69,16 +69,24 @@ export interface PipelineResult {
   };
 }
 
-export async function runPipeline(
+export interface Collected {
+  /** Normalized and de-duplicated, before any seen/niche filtering. */
+  items: Item[];
+  /** Ids of items that skip the zero-keyword-hit drop (their source is alwaysInclude). */
+  alwaysIds: Set<string>;
+  /** item id -> id of the source that produced it. */
+  sourceIds: Map<string, string>;
+  results: SourceResult[];
+  counts: { fetched: number; normalized: number; afterDedupe: number };
+}
+
+/** Fetch every source once, normalize and de-duplicate. Shared by single- and multi-user runs. */
+export async function collectItems(
   config: RadarConfig,
-  opts: PipelineOptions,
-): Promise<PipelineResult> {
+  opts: Omit<PipelineOptions, 'seen'>,
+  warn: (m: string) => void,
+): Promise<Collected> {
   const now = opts.now ?? new Date();
-  const warnings: string[] = [];
-  const warn = (m: string) => {
-    warnings.push(m);
-    opts.warn?.(m);
-  };
   const sources = buildSources(config.sources, { rsshubBase: config.rsshubBase });
   const ctx: SourceContext = {
     fetch: opts.fetch ?? createFetch(config.fetchTimeoutMs),
@@ -95,6 +103,7 @@ export async function runPipeline(
   });
 
   const alwaysIds = new Set<string>();
+  const sourceIds = new Map<string, string>();
   const normalized: Item[] = [];
   let fetched = 0;
   for (const r of results) {
@@ -103,11 +112,31 @@ export async function runPipeline(
       const item = normalizeItem(raw, r.source, now);
       if (!item) continue;
       normalized.push(item);
+      if (!sourceIds.has(item.id)) sourceIds.set(item.id, r.source.id);
       if (r.source.alwaysInclude) alwaysIds.add(item.id);
     }
   }
 
-  const deduped = dedupe(normalized, config.dedupeThreshold).items;
+  const items = dedupe(normalized, config.dedupeThreshold).items;
+  return {
+    items,
+    alwaysIds,
+    sourceIds,
+    results,
+    counts: { fetched, normalized: normalized.length, afterDedupe: items.length },
+  };
+}
+
+export async function runPipeline(
+  config: RadarConfig,
+  opts: PipelineOptions,
+): Promise<PipelineResult> {
+  const warnings: string[] = [];
+  const warn = (m: string) => {
+    warnings.push(m);
+    opts.warn?.(m);
+  };
+  const { items: deduped, alwaysIds, results, counts: c } = await collectItems(config, opts, warn);
   const unseen = filterUnseen(deduped, opts.seen);
   const filtered = prefilter(unseen, config.niches, (i) => alwaysIds.has(i.id));
   const items = rank(filtered, config.topN);
@@ -117,9 +146,9 @@ export async function runPipeline(
     results,
     warnings,
     counts: {
-      fetched,
-      normalized: normalized.length,
-      afterDedupe: deduped.length,
+      fetched: c.fetched,
+      normalized: c.normalized,
+      afterDedupe: c.afterDedupe,
       afterSeen: unseen.length,
       afterPrefilter: filtered.length,
       final: items.length,

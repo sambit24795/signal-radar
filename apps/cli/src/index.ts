@@ -3,10 +3,13 @@ import { parseArgs } from 'node:util';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
+import { eq } from 'drizzle-orm';
+import { createDb, createPgStore, runMigrations, schema, type Db } from '@radar/db';
 import {
   buildSources,
   createNotionClient,
   createTopicQueue,
+  runForUsers,
   runRadar,
   RadarConfigSchema,
   type Enriched,
@@ -14,12 +17,17 @@ import {
 } from '@radar/core';
 
 const USAGE = `usage:
-  radar run [--dry] [--config <file>] [--data-dir <dir>]
+  radar run [--config <file>]           fetch once, write the shared feed, then queue items per Pro user (needs DATABASE_URL)
+  radar run --dry [--config <file>]     print the ranked table, write nothing (no database needed)
+  radar run --local [--data-dir <dir>]  single-user mode: data/seen.json + Notion + one Telegram chat
   radar sources [--config <file>]
+  radar db:migrate                      apply SQL migrations to DATABASE_URL
+  radar user:list                       users with plan, status, trial end, niches
+  radar user:pro --email <e>            dev: make a user Pro/active
   radar notion:init --parent <pageId>   create the Topic Queue database, print its id
 
-env (also read from ./.env): DEEPSEEK_API_KEY, NOTION_TOKEN, NOTION_DB_ID,
-  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GITHUB_TOKEN`;
+env (also read from ./.env): DATABASE_URL, DEEPSEEK_API_KEY, TELEGRAM_BOT_TOKEN, GITHUB_TOKEN,
+  and for --local: NOTION_TOKEN, NOTION_DB_ID, TELEGRAM_CHAT_ID`;
 
 async function loadConfig(file: string): Promise<{ config: RadarConfig; root: string }> {
   const path = resolve(file);
@@ -60,6 +68,100 @@ export function renderTable(items: Enriched[], width = process.stdout.columns ||
       )
       .join('  ');
   return [line(head), ...rows.map(line)].join('\n');
+}
+
+function openDb(): Db {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('set DATABASE_URL (see .env.example)');
+  return createDb(url);
+}
+
+async function cmdRunDb(values: { config: string }) {
+  const { config } = await loadConfig(values.config);
+  const db = openDb();
+  try {
+    const res = await runForUsers(config, createPgStore(db), {
+      warn: (m) => console.error(`warn: ${m}`),
+    });
+    const bySource = res.results
+      .map((r) => {
+        const status = r.skipped ? `skipped (${r.error})` : r.error ? `FAILED (${r.error})` : 'ok';
+        return `  ${r.source.id.padEnd(28)} ${String(r.items.length).padStart(4)} items  ${status}`;
+      })
+      .join('\n');
+    console.log(`sources:\n${bySource}`);
+    console.log(
+      `\nfetched ${res.fetched} -> deduped ${res.deduped}; feed_item rows upserted: ${res.feedRows}` +
+        `\nscoring: ${res.provider}; users processed: ${res.users.length}`,
+    );
+    for (const u of res.users) {
+      console.log(
+        `  ${(u.email ?? u.userId).padEnd(28)} candidates ${u.candidates}, scored ${u.scored}` +
+          `, failed ${u.scoringFailed}, queued ${u.queued}, seen +${u.seenMarked}` +
+          `, telegram ${u.digestSent ? 'sent' : 'skipped'}` +
+          (u.notion
+            ? `, notion ${u.notion.created}+${u.notion.updated}/${u.notion.failed} failed`
+            : '') +
+          (u.error ? `  ERROR: ${u.error}` : ''),
+      );
+    }
+    if (res.users.some((u) => u.error)) process.exitCode = 1;
+  } finally {
+    await db.$client.end({ timeout: 5 });
+  }
+}
+
+async function cmdMigrate() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('set DATABASE_URL (see .env.example)');
+  await runMigrations(url);
+  console.log('migrations applied');
+}
+
+async function cmdUserList() {
+  const db = openDb();
+  try {
+    const rows = await db
+      .select({
+        email: schema.user.email,
+        plan: schema.subscription.plan,
+        status: schema.subscription.status,
+        trialEndsAt: schema.subscription.trialEndsAt,
+        niches: schema.userConfig.niches,
+        telegram: schema.userConfig.telegramChatId,
+      })
+      .from(schema.user)
+      .leftJoin(schema.subscription, eq(schema.subscription.userId, schema.user.id))
+      .leftJoin(schema.userConfig, eq(schema.userConfig.userId, schema.user.id))
+      .orderBy(schema.user.createdAt);
+    if (!rows.length) return void console.log('no users');
+    for (const r of rows) {
+      console.log(
+        `${r.email.padEnd(32)} ${(r.plan ?? 'free').padEnd(5)} ${(r.status ?? 'none').padEnd(9)}` +
+          ` trial ends ${r.trialEndsAt?.toISOString().slice(0, 10) ?? '-'}` +
+          `  niches ${r.niches?.length ?? 0}  telegram ${r.telegram ? 'yes' : 'no'}`,
+      );
+    }
+  } finally {
+    await db.$client.end({ timeout: 5 });
+  }
+}
+
+async function cmdUserPro(values: { email?: string }) {
+  if (!values.email) throw new Error('usage: radar user:pro --email <email>');
+  const db = openDb();
+  try {
+    const [u] = await db.select().from(schema.user).where(eq(schema.user.email, values.email));
+    if (!u) throw new Error(`no user with email ${values.email}`);
+    const set = { plan: 'pro', status: 'active', provider: 'stub', trialEndsAt: null } as const;
+    await db
+      .insert(schema.subscription)
+      .values({ userId: u.id, ...set })
+      .onConflictDoUpdate({ target: schema.subscription.userId, set });
+    console.log(`${u.email} is now pro/active`);
+  } finally {
+    await db.$client.end({ timeout: 5 });
+  }
 }
 
 async function cmdRun(values: { dry?: boolean; config: string; 'data-dir'?: string }) {
@@ -138,13 +240,18 @@ async function main() {
       config: { type: 'string', default: 'radar.config.ts' },
       'data-dir': { type: 'string' },
       parent: { type: 'string' },
+      local: { type: 'boolean', default: false },
+      email: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
   const [cmd] = positionals;
   if (existsSync('.env')) process.loadEnvFile('.env');
   if (values.help || !cmd) return void console.log(USAGE);
-  if (cmd === 'run') return cmdRun(values);
+  if (cmd === 'run') return values.dry || values.local ? cmdRun(values) : cmdRunDb(values);
+  if (cmd === 'db:migrate') return cmdMigrate();
+  if (cmd === 'user:list') return cmdUserList();
+  if (cmd === 'user:pro') return cmdUserPro(values);
   if (cmd === 'sources') return cmdSources(values);
   if (cmd === 'notion:init') return cmdNotionInit(values);
   console.error(`unknown command: ${cmd}\n${USAGE}`);

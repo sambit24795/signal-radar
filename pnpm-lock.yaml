@@ -229,6 +229,12 @@ importers:
       '@radar/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@radar/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.8)(postgres@4.1.0)
 
   packages/core:
     dependencies:
@@ -247,6 +253,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@radar/core':
+        specifier: workspace:*
+        version: link:../core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.8)(postgres@4.1.0)

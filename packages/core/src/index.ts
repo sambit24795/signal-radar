@@ -10,3 +10,4 @@ export * from './feed.js';
 export * from './pipeline.js';
 export * from './concurrency.js';
 export * from './sources/index.js';
+export * from './score/index.js';

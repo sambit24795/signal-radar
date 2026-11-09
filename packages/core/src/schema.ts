@@ -133,7 +133,21 @@ export const RadarConfigSchema = z.object({
   /** Base URL of an RSSHub instance, e.g. http://localhost:1200. Unset = rsshub sources disabled. */
   rsshubBase: z.string().url().optional(),
   provider: z.enum(['none', 'deepseek', 'anthropic']).default('none'),
+  /** How many items survive the keyword prefilter into scoring (and ranking). */
   topN: z.number().int().positive().default(30),
+  scoring: z
+    .object({
+      deepseekModel: z.string().default('deepseek-flash'),
+      deepseekBaseUrl: z.string().url().default('https://api.deepseek.com'),
+      anthropicModel: z.string().default('claude-haiku-5-5'),
+      maxTokens: z.number().int().positive().default(700),
+      timeoutMs: z.number().int().positive().default(60000),
+      concurrency: z.number().int().positive().default(4),
+      /** Max Picked and Skipped rows (each) read from Notion as few-shot examples. */
+      feedbackLimit: z.number().int().nonnegative().default(10),
+    })
+    .prefault({}),
+  digest: z.object({ top: z.number().int().positive().default(5) }).prefault({}),
   dataDir: z.string().default('data'),
   fetchTimeoutMs: z.number().int().positive().default(15000),
   concurrency: z.number().int().positive().default(4),

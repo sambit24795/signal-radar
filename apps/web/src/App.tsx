@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Niche } from '@radar/core/ranking';
-import { CustomizeSheet } from './components/CustomizeSheet';
-import { ItemList, Skeleton } from './components/ItemList';
+import { Gate } from './components/Gate';
+import { ImportOffer } from './components/ImportOffer';
+import { Link } from './components/Link';
 import { Masthead } from './components/Masthead';
-import { NicheChips } from './components/NicheChips';
-import { EmptyState, ErrorState } from './components/States';
-import { Tabs } from './components/Tabs';
+import { Pricing } from './components/Pricing';
+import { Queue } from './components/Queue';
+import { ReadView } from './components/ReadView';
+import { Settings } from './components/Settings';
+import { SignIn } from './components/SignIn';
 import { useInstallPrompt, useNow, useOnline, useRadarData } from './hooks';
-import { formatClock, formatUpdated } from './lib/format';
+import { signOut } from './lib/auth';
+import { clearConfig, loadConfig, patchConfig, useConfig } from './lib/config';
+import { clearMe, useMe } from './lib/me';
 import {
   loadPrefs,
   resetPrefs,
@@ -16,8 +21,8 @@ import {
   type StoredPrefs,
   type Theme,
 } from './lib/prefs';
-import { rankFeed } from './lib/rankClient';
-import { selectView, visibleTabs, type TabId } from './lib/view';
+import { importFlagKey, mergeServerConfig, shouldOfferImport } from './lib/prefsMerge';
+import { navigate, useRoute, type RouteName } from './lib/route';
 
 const prefersDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
 
@@ -31,17 +36,36 @@ function applyTheme(theme: Theme) {
     ?.setAttribute('content', dark ? '#1b1a16' : '#f7f7f4');
 }
 
+const TITLES: Record<RouteName, string> = {
+  read: 'Signal Radar',
+  queue: 'Make queue · Signal Radar',
+  settings: 'Settings · Signal Radar',
+  pricing: 'Pricing · Signal Radar',
+  signin: 'Sign in · Signal Radar',
+};
+
+const offeredBefore = (userId: string) => {
+  try {
+    return localStorage.getItem(importFlagKey(userId)) !== null;
+  } catch {
+    return false;
+  }
+};
+
 export function App() {
   const { data, retry } = useRadarData();
   const online = useOnline();
   const now = useNow();
   const install = useInstallPrompt();
+  const route = useRoute();
+  const me = useMe();
+  const { config, syncError } = useConfig();
 
   const [stored, setStored] = useState<StoredPrefs>(() => loadPrefs(localStorage));
-  const [tab, setTab] = useState<TabId>('top');
-  const [nicheId, setNicheId] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [systemDark, setSystemDark] = useState(prefersDark);
+  const [offerDone, setOfferDone] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const firstRoute = useRef(true);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -51,126 +75,145 @@ export function App() {
   }, []);
   useEffect(() => applyTheme(stored.theme), [stored.theme, systemDark]);
 
+  // The account's saved config follows the session.
+  const userId = me.status === 'ready' ? me.me.user.id : null;
+  useEffect(() => {
+    if (userId) void loadConfig();
+    else if (me.status === 'anon') clearConfig();
+  }, [userId, me.status]);
+
+  useEffect(() => {
+    document.title = TITLES[route.name];
+    window.scrollTo(0, 0);
+    if (firstRoute.current) firstRoute.current = false;
+    else mainRef.current?.focus({ preventScroll: true });
+  }, [route.name]);
+
   const update = useCallback((next: StoredPrefs) => {
     setStored(next);
     savePrefs(localStorage, next);
   }, []);
 
   const defaults = data.status === 'ready' ? data.defaults : null;
+  const signedIn = userId !== null && config !== null;
+  const effective = useMemo(
+    () => mergeServerConfig(stored, config, defaults),
+    [stored, config, defaults],
+  );
   const prefs = useMemo(
-    () => (defaults ? resolvePrefs(stored, defaults) : null),
-    [stored, defaults],
-  );
-
-  const ranked = useMemo(
-    () =>
-      data.status === 'ready' && prefs
-        ? rankFeed(data.feed.items, prefs.niches, { sources: prefs.sources, topN: 500 })
-        : [],
-    [data, prefs],
-  );
-
-  const tabs = useMemo(() => visibleTabs(prefs?.sources ?? []), [prefs]);
-  const activeTab = tabs.some((t) => t.id === tab) ? tab : 'top';
-  const activeNiche = prefs?.niches.some((n) => n.id === nicheId) ? nicheId : null;
-  const rows = useMemo(
-    () => selectView(ranked, activeTab, activeNiche),
-    [ranked, activeTab, activeNiche],
+    () => (defaults ? resolvePrefs(effective, defaults) : null),
+    [effective, defaults],
   );
 
   const dark = stored.theme === 'dark' || (stored.theme === 'system' && systemDark);
-  const updatedAt = data.status === 'ready' ? data.feed.updatedAt : null;
   const stale = data.status === 'ready' && (!online || data.failedRefresh);
 
-  const setNiches = (niches: Niche[]) => update({ ...stored, niches });
-  const toggleSource = (id: string) =>
-    update({
-      ...stored,
-      disabledSources: stored.disabledSources.includes(id)
-        ? stored.disabledSources.filter((s) => s !== id)
-        : [...stored.disabledSources, id],
-    });
+  const setNiches = (niches: Niche[]) => {
+    if (signedIn) patchConfig({ niches });
+    else update({ ...stored, niches });
+  };
+  const toggleSource = (id: string) => {
+    if (signedIn && prefs && defaults) {
+      const on = new Set(prefs.sources.map((s) => s.id));
+      if (on.has(id)) on.delete(id);
+      else on.add(id);
+      patchConfig({ sources: defaults.sources.map((s) => s.id).filter((s) => on.has(s)) });
+    } else {
+      update({
+        ...stored,
+        disabledSources: stored.disabledSources.includes(id)
+          ? stored.disabledSources.filter((s) => s !== id)
+          : [...stored.disabledSources, id],
+      });
+    }
+  };
+  const reset = () => {
+    setStored(resetPrefs(localStorage));
+    if (signedIn) patchConfig({ niches: [], sources: [] });
+  };
+
+  const onSignOut = useCallback(async () => {
+    try {
+      await signOut();
+    } catch {
+      /* the cookie may already be gone; treat as signed out */
+    }
+    clearMe();
+    clearConfig();
+    if (route.name === 'queue' || route.name === 'settings') navigate('/');
+  }, [route.name]);
+
+  const offer =
+    userId && config && defaults && !offerDone && route.name !== 'signin'
+      ? shouldOfferImport(stored, config, offeredBefore(userId))
+      : false;
 
   return (
     <>
-      <a className="skip" href="#feed-panel">
-        Skip to the feed
+      <a className="skip" href="#main">
+        Skip to the content
       </a>
       <div className="page">
         <Masthead
+          route={route.name}
+          me={me}
           dark={dark}
           onToggleTheme={() => update({ ...stored, theme: dark ? 'light' : 'dark' })}
-          onCustomize={() => setSheetOpen(true)}
+          onSignOut={() => void onSignOut()}
         />
 
-        <div className="subhead">
-          <p className="meta" aria-live="polite">
-            {data.status === 'ready'
-              ? stale
-                ? `Offline. Showing the feed from ${formatClock(updatedAt) || 'earlier'}.`
-                : updatedAt
-                  ? `Updated ${formatUpdated(updatedAt, now)}`
-                  : ''
-              : data.status === 'loading'
-                ? 'Loading the feed'
-                : ''}
-          </p>
-          {install && (
-            <button type="button" className="link" onClick={install}>
-              Install app
-            </button>
+        {offer && userId && config && defaults && (
+          <ImportOffer
+            userId={userId}
+            stored={stored}
+            config={config}
+            defaults={defaults}
+            onDone={() => setOfferDone(true)}
+          />
+        )}
+
+        <main id="main" ref={mainRef} tabIndex={-1} className="main">
+          {route.name === 'read' && (
+            <ReadView
+              data={data}
+              retry={retry}
+              prefs={prefs}
+              now={now}
+              stale={stale}
+              install={install}
+              syncError={syncError}
+              onNiches={setNiches}
+              onToggleSource={toggleSource}
+              onReset={reset}
+            />
           )}
-        </div>
-
-        {tabs.length > 1 && <Tabs tabs={tabs} active={activeTab} onChange={setTab} />}
-        {prefs && <NicheChips niches={prefs.niches} active={activeNiche} onChange={setNicheId} />}
-
-        <main
-          id="feed-panel"
-          role="tabpanel"
-          aria-labelledby={`tab-${activeTab}`}
-          tabIndex={-1}
-          className="panel"
-        >
-          {data.status === 'loading' && <Skeleton />}
-          {data.status === 'error' && <ErrorState message={data.message} onRetry={retry} />}
-          {data.status === 'ready' &&
-            (rows.length > 0 && prefs ? (
-              <ItemList
-                key={`${activeTab}:${activeNiche}`}
-                items={rows}
-                niches={prefs.niches}
-                now={now}
-              />
+          {route.name === 'queue' &&
+            (me.status === 'ready' && me.me.subscription.isPro ? (
+              <Queue />
             ) : (
-              <EmptyState
-                filtered={activeNiche !== null}
-                onCustomize={() => setSheetOpen(true)}
-                onClearFilter={() => setNicheId(null)}
-              />
+              <Gate me={me} feature="queue" />
             ))}
+          {route.name === 'settings' &&
+            (me.status === 'ready' ? (
+              <Settings me={me.me} defaults={defaults} />
+            ) : (
+              <Gate me={me} feature="settings" />
+            ))}
+          {route.name === 'pricing' && <Pricing me={me} />}
+          {route.name === 'signin' && (
+            <SignIn me={me} startSignup={route.signup} onSignOut={() => void onSignOut()} />
+          )}
         </main>
 
         <footer className="footer">
-          <p>Pro: AI-scored hooks and a personal queue, coming soon.</p>
+          <p>
+            Pro adds AI-scored hooks and a personal queue.{' '}
+            <Link to="pricing" className="link">
+              See Pricing
+            </Link>
+          </p>
         </footer>
       </div>
-
-      {defaults && prefs && (
-        <CustomizeSheet
-          open={sheetOpen}
-          onClose={() => setSheetOpen(false)}
-          niches={prefs.niches}
-          allSources={defaults.sources}
-          enabledSourceIds={new Set(prefs.sources.map((s) => s.id))}
-          onNiches={setNiches}
-          onToggleSource={toggleSource}
-          onReset={() => {
-            setStored(resetPrefs(localStorage));
-            setNicheId(null);
-          }}
-        />
-      )}
     </>
   );
 }

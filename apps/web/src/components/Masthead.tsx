@@ -1,18 +1,44 @@
+import type { MeState } from '../lib/me';
+import type { RouteName } from '../lib/route';
 import { MoonIcon, RadarMark, SunIcon } from '../icons';
+import { AccountMenu } from './AccountMenu';
+import { Link } from './Link';
 
 interface Props {
+  route: RouteName;
+  me: MeState;
   dark: boolean;
   onToggleTheme: () => void;
-  onCustomize: () => void;
+  onSignOut: () => void;
 }
 
-export function Masthead({ dark, onToggleTheme, onCustomize }: Props) {
+const NAV: { to: RouteName; label: string }[] = [
+  { to: 'read', label: 'Read' },
+  { to: 'queue', label: 'Queue' },
+  { to: 'pricing', label: 'Pricing' },
+];
+
+export function Masthead({ route, me, dark, onToggleTheme, onSignOut }: Props) {
   return (
     <header className="masthead">
       <h1 className="wordmark">
-        <RadarMark />
-        <span>Signal Radar</span>
+        <Link to="read" aria-label="Signal Radar, home">
+          <RadarMark />
+          <span>Signal Radar</span>
+        </Link>
       </h1>
+      <nav className="nav" aria-label="Main">
+        {NAV.map((n) => (
+          <Link
+            key={n.to}
+            to={n.to}
+            className="nav-link"
+            aria-current={route === n.to ? 'page' : undefined}
+          >
+            {n.label}
+          </Link>
+        ))}
+      </nav>
       <div className="masthead-actions">
         <button
           type="button"
@@ -22,9 +48,7 @@ export function Masthead({ dark, onToggleTheme, onCustomize }: Props) {
         >
           {dark ? <SunIcon /> : <MoonIcon />}
         </button>
-        <button type="button" className="btn" onClick={onCustomize}>
-          Customize
-        </button>
+        <AccountMenu me={me} onSignOut={onSignOut} />
       </div>
     </header>
   );

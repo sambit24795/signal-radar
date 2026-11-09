@@ -38,6 +38,11 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             {
+              // Session, account, queue and billing data is per user and must never come from a cache.
+              urlPattern: ({ url }) => /^\/api\/(me|queue|auth|billing)(\/|$)/.test(url.pathname),
+              handler: 'NetworkOnly',
+            },
+            {
               // The last feed (and defaults) keeps working offline.
               urlPattern: ({ url }) => url.pathname.startsWith('/api/feed'),
               handler: 'NetworkFirst',

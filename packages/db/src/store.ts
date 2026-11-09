@@ -33,6 +33,12 @@ export function createPgStore(db: Db): RadarStore {
               eq(schema.subscription.status, 'trialing'),
               gt(schema.subscription.trialEndsAt, now),
             ),
+            // canceled keeps Pro until the paid period ends (mirrors isPro in apps/api)
+            and(
+              eq(schema.subscription.status, 'canceled'),
+              eq(schema.subscription.plan, 'pro'),
+              gt(schema.subscription.currentPeriodEnd, now),
+            ),
           ),
         )
         .orderBy(schema.user.createdAt);

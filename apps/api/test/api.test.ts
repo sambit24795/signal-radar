@@ -52,13 +52,13 @@ describe.skipIf(!dbAvailable)('api', () => {
   });
 
   describe('sign-up', () => {
-    it('creates an empty config and a 7-day Pro trial', async () => {
+    it('creates a config with the default niches and a 7-day Pro trial', async () => {
       const u = await signUp(ctx.app, 'ann@example.com');
       const [cfg] = await ctx.db
         .select()
         .from(schema.userConfig)
         .where(eq(schema.userConfig.userId, u.id));
-      expect(cfg?.niches).toEqual([]);
+      expect(cfg?.niches).toEqual(radarConfig.niches);
       expect(cfg?.topN).toBe(10);
       const [sub] = await ctx.db
         .select()

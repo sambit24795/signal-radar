@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { schema, type Db } from '@radar/db';
 import type { ApiEnv } from './env.js';
+import radarConfig from '../../../radar.config.js';
 
 export const TRIAL_DAYS = 7;
 
@@ -16,9 +17,13 @@ export function createAuth(db: Db, env: ApiEnv) {
       user: {
         create: {
           after: async (user) => {
-            // Every new user gets an empty config and a 7-day Pro trial.
+            // Every new user gets the default niches (so the pipeline has something to score
+            // before they open Settings) and a 7-day Pro trial.
             const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 86_400_000);
-            await db.insert(schema.userConfig).values({ userId: user.id }).onConflictDoNothing();
+            await db
+              .insert(schema.userConfig)
+              .values({ userId: user.id, niches: radarConfig.niches })
+              .onConflictDoNothing();
             await db
               .insert(schema.subscription)
               .values({

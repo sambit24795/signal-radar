@@ -29,7 +29,11 @@ describe.skipIf(!available)('createPgStore + runForUsers', () => {
 
   async function addUser(
     id: string,
-    sub: { status: 'trialing' | 'active' | 'none'; trialEndsAt?: Date },
+    sub: {
+      status: 'trialing' | 'active' | 'canceled' | 'none';
+      trialEndsAt?: Date;
+      currentPeriodEnd?: Date;
+    },
     niches = config.niches,
   ) {
     await db.insert(schema.user).values({ id, name: id, email: `${id}@example.com` });
@@ -39,13 +43,15 @@ describe.skipIf(!available)('createPgStore + runForUsers', () => {
   const future = new Date(NOW.getTime() + 86_400_000);
   const past = new Date(NOW.getTime() - 86_400_000);
 
-  it('lists only Pro users (active, or trialing and not expired)', async () => {
+  it('lists only Pro users (active, unexpired trial, or canceled within the paid period)', async () => {
     await addUser('active', { status: 'active' });
     await addUser('trial', { status: 'trialing', trialEndsAt: future });
     await addUser('expired', { status: 'trialing', trialEndsAt: past });
     await addUser('none', { status: 'none' });
+    await addUser('canceled', { status: 'canceled', currentPeriodEnd: future });
+    await addUser('lapsed', { status: 'canceled', currentPeriodEnd: past });
     const users = await createPgStore(db).listProUsers(NOW);
-    expect(users.map((u) => u.id).sort()).toEqual(['active', 'trial']);
+    expect(users.map((u) => u.id).sort()).toEqual(['active', 'canceled', 'trial']);
   });
 
   it('writes feed_item, queue_item and seen; a second run adds nothing', async () => {

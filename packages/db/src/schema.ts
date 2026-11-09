@@ -209,6 +209,24 @@ export const queueItem = pgTable(
   ],
 );
 
+export type PageSummaryStatus = 'ok' | 'unreadable';
+
+/** Shared cache of on-demand page summaries, keyed by cleaned URL (same for every user). */
+export const pageSummary = pgTable(
+  'page_summary',
+  {
+    url: text('url').primaryKey(),
+    tldr: text('tldr'),
+    points: jsonb('points').$type<string[]>(),
+    status: text('status').$type<PageSummaryStatus>().notNull(),
+    model: text('model').notNull(),
+    /** The user whose request generated this row; drives the per-user daily cap. */
+    requestedBy: text('requested_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('page_summary_requested_by_created_idx').on(t.requestedBy, t.createdAt)],
+);
+
 export const seen = pgTable(
   'seen',
   {

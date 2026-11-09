@@ -8,6 +8,7 @@ import type { ApiEnv } from './env.js';
 import { feedRoutes } from './routes/feed.js';
 import { meRoutes } from './routes/me.js';
 import { queueRoutes } from './routes/queue.js';
+import { summarizeRoutes } from './routes/summarize.js';
 import { telegramRoutes } from './routes/telegram.js';
 import { pushRoutes } from './routes/push.js';
 import { webhookRoutes } from './routes/webhooks.js';
@@ -45,6 +46,7 @@ export function createApp({ db, env, net }: AppDeps) {
   app.route('/api/feed', feedRoutes(deps));
   app.route('/api/me', meRoutes(deps));
   app.route('/api/queue', queueRoutes(deps));
+  app.route('/api/summarize', summarizeRoutes(deps));
   app.route('/api/billing', billingRoutes(deps));
   app.route('/api/push', pushRoutes(deps));
   app.route('/api/telegram', telegramRoutes(deps));

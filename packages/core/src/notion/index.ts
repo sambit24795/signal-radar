@@ -1,4 +1,5 @@
-import { Client } from '@notionhq/client';
+// The SDK is CommonJS; Node cannot detect its named exports, so go through the default export.
+import notionSdk from '@notionhq/client';
 import type { Enriched, Feedback, FeedbackExample } from '../score/types.js';
 
 /** The slice of the Notion SDK we use; tests pass a fake. Notion API version 2025-09-03 (data sources). */
@@ -17,7 +18,7 @@ export interface NotionLike {
 }
 
 export function createNotionClient(token: string): NotionLike {
-  return new Client({ auth: token }) as unknown as NotionLike;
+  return new notionSdk.Client({ auth: token }) as unknown as NotionLike;
 }
 
 export const STATUSES = ['Inbox', 'Picked', 'Scripted', 'Posted', 'Skipped'] as const;

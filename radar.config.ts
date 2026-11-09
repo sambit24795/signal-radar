@@ -151,8 +151,13 @@ export default defineConfig({
   // Set to e.g. 'http://localhost:1200' to enable rsshub: sources.
   rsshubBase: undefined,
 
-  // 'deepseek' and 'anthropic' arrive in Session 2.
-  provider: 'none',
+  // 'deepseek' (needs DEEPSEEK_API_KEY), 'anthropic' (needs ANTHROPIC_API_KEY) or 'none'.
+  // A missing key falls back to 'none' with a warning.
+  provider: 'deepseek',
 
+  // Items scored by the model per run (after the keyword prefilter).
   topN: 30,
+
+  // scoring: { deepseekModel: 'deepseek-flash', anthropicModel: 'claude-haiku-5-5', feedbackLimit: 10 },
+  // digest: { top: 5 },
 });

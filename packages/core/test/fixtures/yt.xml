@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA"/>
+ <id>yt:channel:sBjURrPoezykLs9EqgamOA</id>
+ <yt:channelId>sBjURrPoezykLs9EqgamOA</yt:channelId>
+ <title>Fireship</title>
+ <link rel="alternate" href="https://www.youtube.com/channel/UCsBjURrPoezykLs9EqgamOA"/>
+ <author><name>Fireship</name><uri>https://www.youtube.com/channel/UCsBjURrPoezykLs9EqgamOA</uri></author>
+ <published>2017-04-07T17:25:02+00:00</published>
+ <entry>
+  <id>yt:video:AAAAAAAAAAA</id>
+  <yt:videoId>AAAAAAAAAAA</yt:videoId>
+  <yt:channelId>sBjURrPoezykLs9EqgamOA</yt:channelId>
+  <title>New TypeScript tool in 100 seconds</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=AAAAAAAAAAA"/>
+  <author><name>Fireship</name><uri>https://www.youtube.com/channel/UCsBjURrPoezykLs9EqgamOA</uri></author>
+  <published>2026-11-08T15:00:00+00:00</published>
+  <updated>2026-11-08T16:10:00+00:00</updated>
+  <media:group>
+   <media:title>New TypeScript tool in 100 seconds</media:title>
+   <media:content url="https://www.youtube.com/v/AAAAAAAAAAA?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i2.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg" width="480" height="360"/>
+   <media:description>A quick look at a new TypeScript dev tool.</media:description>
+   <media:community>
+    <media:starRating count="12000" average="5.00" min="1" max="5"/>
+    <media:statistics views="250000"/>
+   </media:community>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:BBBBBBBBBBB</id>
+  <yt:videoId>BBBBBBBBBBB</yt:videoId>
+  <yt:channelId>sBjURrPoezykLs9EqgamOA</yt:channelId>
+  <title>Agents in one minute #shorts</title>
+  <link rel="alternate" href="https://www.youtube.com/shorts/BBBBBBBBBBB"/>
+  <author><name>Fireship</name><uri>https://www.youtube.com/channel/UCsBjURrPoezykLs9EqgamOA</uri></author>
+  <published>2026-11-07T09:00:00+00:00</published>
+  <updated>2026-11-07T09:30:00+00:00</updated>
+  <media:group>
+   <media:title>Agents in one minute #shorts</media:title>
+   <media:thumbnail url="https://i2.ytimg.com/vi/BBBBBBBBBBB/hqdefault.jpg" width="480" height="360"/>
+   <media:description>Short about AI agents.</media:description>
+   <media:community><media:statistics views="90000"/></media:community>
+  </media:group>
+ </entry>
+</feed>

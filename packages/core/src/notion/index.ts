@@ -1,5 +1,5 @@
 import { Client } from '@notionhq/client';
-import type { Enriched } from '../score/types.js';
+import type { Enriched, Feedback, FeedbackExample } from '../score/types.js';
 
 /** The slice of the Notion SDK we use; tests pass a fake. Notion API version 2025-09-03 (data sources). */
 export interface NotionLike {
@@ -155,4 +155,58 @@ export async function upsertAll(
     }
   }
   return out;
+}
+
+// ---- feedback loop ----
+
+type Prop = {
+  title?: { plain_text?: string }[];
+  rich_text?: { plain_text?: string }[];
+  select?: { name?: string } | null;
+  multi_select?: { name?: string }[];
+};
+
+const plain = (p?: Prop) =>
+  (p?.title ?? p?.rich_text ?? [])
+    .map((t) => t.plain_text ?? '')
+    .join('')
+    .trim();
+
+function toExample(page: unknown): FeedbackExample | null {
+  const props = (page as { properties?: Record<string, Prop> }).properties ?? {};
+  const title = plain(props.Title);
+  if (!title) return null;
+  const ex: FeedbackExample = { title };
+  const source = props.Source?.select?.name;
+  if (source) ex.source = source;
+  const hook = plain(props.Hook);
+  if (hook) ex.hook = hook;
+  const angle = plain(props.Angle);
+  if (angle) ex.angle = angle;
+  const niches = (props.Niche?.multi_select ?? []).map((n) => n.name ?? '').filter(Boolean);
+  if (niches.length) ex.niches = niches;
+  return ex;
+}
+
+/** The most recently edited Picked and Skipped rows (up to `limit` each), as few-shot examples. */
+export async function fetchFeedback(
+  notion: NotionLike,
+  dataSourceId: string,
+  limit: number,
+): Promise<Feedback> {
+  if (limit <= 0) return { picked: [], skipped: [] };
+  const read = async (status: 'Picked' | 'Skipped') => {
+    const r = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: { property: 'Status', select: { equals: status } },
+      sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
+      page_size: limit,
+    });
+    return r.results
+      .slice(0, limit)
+      .map(toExample)
+      .filter((e): e is FeedbackExample => e !== null);
+  };
+  const [picked, skipped] = await Promise.all([read('Picked'), read('Skipped')]);
+  return { picked, skipped };
 }

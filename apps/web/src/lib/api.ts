@@ -11,6 +11,8 @@ export class ApiError extends Error {
 interface Init {
   method?: string;
   json?: unknown;
+  /** Gets the HTTP status of a successful reply (201 vs 200 can mean different things). */
+  onStatus?: (status: number) => void;
 }
 
 /** Same-origin JSON call (cookies ride along). Non-2xx and network failures throw `ApiError`. */
@@ -43,5 +45,6 @@ export async function api<T>(path: string, init: Init = {}): Promise<T> {
       typeof o.code === 'string' ? o.code : undefined,
     );
   }
+  init.onStatus?.(res.status);
   return body as T;
 }

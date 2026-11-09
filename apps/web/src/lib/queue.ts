@@ -55,6 +55,7 @@ export const initialQueue: QueueState = { items: [], nextCursor: null, selected:
 export type QueueAction =
   | { type: 'clear' }
   | { type: 'loaded'; page: QueuePage; append: boolean }
+  | { type: 'prepend'; item: QueueItem }
   | { type: 'remove'; id: string }
   | { type: 'restore'; item: QueueItem; index: number }
   | { type: 'select'; id: string }
@@ -76,6 +77,11 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
         nextCursor: action.page.nextCursor,
         selected: keep ? state.selected : (items[0]?.id ?? null),
       };
+    }
+    case 'prepend': {
+      // A link added by hand goes to the top; a repeat of one already listed moves up instead.
+      const items = [action.item, ...state.items.filter((i) => i.id !== action.item.id)];
+      return { ...state, items, selected: action.item.id };
     }
     case 'remove': {
       const index = state.items.findIndex((i) => i.id === action.id);

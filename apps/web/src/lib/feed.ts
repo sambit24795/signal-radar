@@ -1,4 +1,5 @@
 import type { Item, Niche } from '@radar/core/ranking';
+import type { SourceKind } from './view';
 
 /** A `feed_item` row as returned by `GET /api/feed`. */
 export interface FeedRow {
@@ -16,7 +17,7 @@ export interface FeedRow {
 export interface SourceRef {
   id: string;
   name: string;
-  type: Item['sourceKind'];
+  type: SourceKind;
 }
 
 export interface Defaults {
@@ -32,7 +33,16 @@ export interface Feed {
 
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 
-const KINDS: readonly string[] = ['hn', 'reddit', 'github', 'rss'];
+const KINDS: readonly string[] = [
+  'hn',
+  'reddit',
+  'github',
+  'rss',
+  'lobsters',
+  'devto',
+  'mastodon',
+  'youtube',
+];
 const MEDIA: readonly string[] = ['article', 'video', 'short', 'repo', 'social'];
 
 const num = (v: unknown): number | undefined =>

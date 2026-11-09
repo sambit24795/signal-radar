@@ -5,6 +5,10 @@ export const TYPE_LABEL: Record<SourceRef['type'], string> = {
   reddit: 'Reddit',
   github: 'GitHub',
   rss: 'Feed',
+  lobsters: 'Lobsters',
+  devto: 'DEV',
+  mastodon: 'Mastodon',
+  youtube: 'YouTube',
 };
 
 export function SourcesEditor({

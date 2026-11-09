@@ -27,6 +27,7 @@ import { hasOpenedRadar, landingRedirect, markRadarOpened } from './lib/landing'
 import { justOnboarded, useOnboardingDismissed } from './lib/onboarding';
 import { importFlagKey, mergeServerConfig, shouldOfferImport } from './lib/prefsMerge';
 import { navigate, useRoute, type RouteName } from './lib/route';
+import type { SourceKind } from './lib/view';
 
 const prefersDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
 
@@ -158,6 +159,7 @@ export function App() {
       });
     }
   };
+  const setSourceKinds = (sourceKinds: SourceKind[]) => update({ ...stored, sourceKinds });
   const clearTopics = () => {
     setStored(startOver(localStorage));
     if (signedIn) patchConfig({ niches: [] });
@@ -244,6 +246,7 @@ export function App() {
               syncError={syncError}
               onNiches={setNiches}
               onToggleSource={toggleSource}
+              onSourceKinds={setSourceKinds}
               onStartOver={clearTopics}
               onShowAll={showEverything}
               settling={settling}

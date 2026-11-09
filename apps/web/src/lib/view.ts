@@ -2,20 +2,57 @@ import type { Item, Niche, ScoredItem } from '@radar/core/ranking';
 import type { SourceRef } from './feed';
 import { compact, domainOf, formatAge } from './format';
 
-/** Which source a view is narrowed to; sources are a quiet filter, topics are the tabs. */
-export type SourceFilter = 'all' | Item['sourceKind'];
+/** Every source kind the feed can carry. */
+export type SourceKind = Item['sourceKind'];
 
-export const SOURCE_FILTERS: { id: SourceFilter; label: string }[] = [
-  { id: 'all', label: 'All sources' },
+export const SOURCE_KINDS: { id: SourceKind; label: string }[] = [
   { id: 'hn', label: 'Hacker News' },
   { id: 'reddit', label: 'Reddit' },
   { id: 'github', label: 'GitHub' },
-  { id: 'rss', label: 'Videos and feeds' },
+  { id: 'lobsters', label: 'Lobsters' },
+  { id: 'devto', label: 'DEV' },
+  { id: 'mastodon', label: 'Mastodon' },
+  { id: 'youtube', label: 'YouTube' },
+  { id: 'rss', label: 'News and blogs' },
 ];
 
-/** "All sources" is always there; a source type appears while at least one source of it is on. */
-export function visibleSourceFilters(sources: SourceRef[]) {
-  return SOURCE_FILTERS.filter((t) => t.id === 'all' || sources.some((s) => s.type === t.id));
+export const isSourceKind = (k: unknown): k is SourceKind => SOURCE_KINDS.some((o) => o.id === k);
+
+/** A source kind appears while at least one source of it is on. */
+export function visibleSourceKinds(sources: SourceRef[]) {
+  return SOURCE_KINDS.filter((t) => sources.some((s) => s.type === t.id));
+}
+
+/**
+ * The kinds a view shows. `saved` is what the user ticked (empty means "all"); kinds that are no
+ * longer on are dropped, and an empty result falls back to every kind that is on.
+ */
+export function effectiveKinds(saved: readonly string[], available: readonly SourceKind[]) {
+  const picked = available.filter((k) => saved.includes(k));
+  return picked.length > 0 ? picked : [...available];
+}
+
+/**
+ * Ticks or unticks one kind. The last ticked kind stays on (the view is never empty). The result is
+ * what to save: empty when every kind is on.
+ */
+export function toggleKind(
+  saved: readonly string[],
+  available: readonly SourceKind[],
+  kind: SourceKind,
+): SourceKind[] {
+  const now = effectiveKinds(saved, available);
+  const next = now.includes(kind) ? now.filter((k) => k !== kind) : [...now, kind];
+  if (next.length === 0) return now.length === available.length ? [] : [...now];
+  return next.length === available.length ? [] : available.filter((k) => next.includes(k));
+}
+
+/** The menu trigger: "All sources", one source's name, or "3 sources". */
+export function kindsLabel(saved: readonly string[], available: readonly SourceKind[]): string {
+  const on = effectiveKinds(saved, available);
+  if (on.length === available.length) return 'All sources';
+  if (on.length === 1) return SOURCE_KINDS.find((o) => o.id === on[0])?.label ?? 'One source';
+  return `${on.length} sources`;
 }
 
 /** The "All" topic tab. */
@@ -29,17 +66,16 @@ export function topicTabs(niches: Niche[]): { id: string; label: string }[] {
   ];
 }
 
-/** The rows for one topic, optionally narrowed to one source type. `ranked` is already best-first. */
+/** The rows for one topic, optionally narrowed to some source kinds (null: all). `ranked` is already best-first. */
 export function selectView(
   ranked: ScoredItem[],
   nicheId: string | null,
-  source: SourceFilter = 'all',
+  kinds: readonly string[] | null = null,
   limit = 100,
 ): ScoredItem[] {
   return ranked
     .filter(
-      (i) =>
-        (source === 'all' || i.sourceKind === source) && (!nicheId || i.niches.includes(nicheId)),
+      (i) => (!kinds || kinds.includes(i.sourceKind)) && (!nicheId || i.niches.includes(nicheId)),
     )
     .slice(0, limit);
 }
@@ -52,8 +88,8 @@ export function nicheLabel(name: string): string {
 /** The mono metadata line, as parts: source, domain, age, engagement, momentum, score. */
 export function metaParts(item: ScoredItem, now: number = Date.now()): string[] {
   const parts: string[] = [item.source];
-  // GitHub and Reddit links point at the source itself, so the host adds nothing.
-  if (item.sourceKind === 'hn' || item.sourceKind === 'rss') {
+  // GitHub, Reddit, DEV and YouTube links point at the source itself, so the host adds nothing.
+  if (!['github', 'reddit', 'devto', 'youtube'].includes(item.sourceKind)) {
     const domain = domainOf(item.url);
     if (domain && !item.source.toLowerCase().includes(domain.split('.')[0]!)) parts.push(domain);
   }

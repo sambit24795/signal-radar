@@ -51,7 +51,7 @@ describe('rowToItem', () => {
   });
 
   it('drops rows with an unknown source type or no title', () => {
-    expect(rowToItem(row({ sourceType: 'mastodon' }))).toBeNull();
+    expect(rowToItem(row({ sourceType: 'tiktok' }))).toBeNull();
     expect(rowToItem(row({ title: '' }))).toBeNull();
   });
 });

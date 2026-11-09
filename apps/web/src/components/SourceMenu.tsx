@@ -1,25 +1,28 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { CheckIcon, ChevronIcon } from '../icons';
-import { SOURCE_FILTERS, type SourceFilter } from '../lib/view';
+import { effectiveKinds, kindsLabel, toggleKind, type SourceKind } from '../lib/view';
 
 interface Props {
-  options: { id: SourceFilter; label: string }[];
-  value: SourceFilter;
-  onChange: (id: SourceFilter) => void;
+  options: { id: SourceKind; label: string }[];
+  /** What the user ticked; empty means every source. */
+  value: readonly string[];
+  /** Called with what to save: empty when every source is on. */
+  onChange: (kinds: SourceKind[]) => void;
 }
 
-/** "All sources" as a quiet text control with a small menu; sources narrow the feed, topics lead it. */
+/** "All sources" as a quiet text control; the menu ticks any number of sources, never none. */
 export function SourceMenu({ options, value, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') {
         setOpen(false);
         button.current?.focus();
@@ -34,7 +37,21 @@ export function SourceMenu({ options, value, onChange }: Props) {
   }, [open]);
 
   if (options.length < 2) return null;
-  const current = SOURCE_FILTERS.find((o) => o.id === value)?.label ?? 'All sources';
+  const available = options.map((o) => o.id);
+  const on = effectiveKinds(value, available);
+  const all = on.length === available.length;
+
+  const arrows = (e: KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const rows = [
+      ...(list.current?.querySelectorAll<HTMLElement>('[role=menuitemcheckbox]') ?? []),
+    ];
+    const at = rows.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === 'ArrowDown' ? (at + 1) % rows.length : (at - 1 + rows.length) % rows.length;
+    rows[next]?.focus();
+    e.preventDefault();
+  };
 
   return (
     <div className="srcmenu" ref={root}>
@@ -46,30 +63,54 @@ export function SourceMenu({ options, value, onChange }: Props) {
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {current}
+        {kindsLabel(value, available)}
         <ChevronIcon />
       </button>
       {open && (
-        <div className="menu srcmenu-list" role="menu" aria-label="Show stories from">
-          {options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={o.id === value}
-              className="menu-item"
-              onClick={() => {
-                onChange(o.id);
-                setOpen(false);
-                button.current?.focus();
-              }}
-            >
-              <span className="menu-check" aria-hidden="true">
-                {o.id === value && <CheckIcon />}
-              </span>
-              {o.label}
-            </button>
-          ))}
+        <div
+          ref={list}
+          className="menu srcmenu-list"
+          role="menu"
+          aria-label="Show stories from"
+          onKeyDown={arrows}
+        >
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={all}
+            aria-disabled={all}
+            className="menu-item srcmenu-all"
+            onClick={() => onChange([])}
+          >
+            <span className="menu-check" aria-hidden="true">
+              {all && <CheckIcon />}
+            </span>
+            All sources
+          </button>
+          {options.map((o) => {
+            const checked = on.includes(o.id);
+            // The last ticked source stays on, so the view is never empty.
+            const last = checked && on.length === 1;
+            return (
+              <button
+                key={o.id}
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={checked}
+                aria-disabled={last}
+                title={last ? 'Keep at least one source on' : undefined}
+                className="menu-item"
+                onClick={() => {
+                  if (!last) onChange(toggleKind(value, available, o.id));
+                }}
+              >
+                <span className="menu-check" aria-hidden="true">
+                  {checked && <CheckIcon />}
+                </span>
+                {o.label}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

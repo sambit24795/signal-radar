@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { ApiError } from '../lib/api';
+import { addToIdeas, normalizeLink, takeQueueTab } from '../lib/ideas';
 import { refreshMe } from '../lib/me';
 import { useNow } from '../hooks';
 import { justOnboarded } from '../lib/onboarding';
@@ -29,12 +30,15 @@ interface Toast {
 type Load = 'loading' | 'ready' | 'more' | 'error';
 
 export function Queue() {
-  const [status, setStatus] = useState<QueueStatus>('new');
+  const [status, setStatus] = useState<QueueStatus>(takeQueueTab);
   const [state, dispatch] = useReducer(queueReducer, initialQueue);
   const [load, setLoad] = useState<Load>('loading');
   const [error, setError] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
   const [hint, setHint] = useState(() => !hintSeen(localStorage));
+  const [link, setLink] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addNote, setAddNote] = useState<{ kind: 'done' | 'error'; text: string } | null>(null);
   const now = useNow();
   const toastId = useRef(0);
   const stateRef = useRef(state);
@@ -158,6 +162,41 @@ export function Queue() {
     return () => window.removeEventListener('keydown', onKey);
   }, [decide, undo, toast, status]);
 
+  const addLink = async (e: FormEvent) => {
+    e.preventDefault();
+    if (adding) return;
+    const url = normalizeLink(link);
+    if (!url) {
+      setAddNote({
+        kind: 'error',
+        text: 'That does not look like a web link. Paste the full address.',
+      });
+      return;
+    }
+    setAdding(true);
+    setAddNote(null);
+    setStatus('picked');
+    try {
+      const { item, existed } = await addToIdeas({ url });
+      dispatch({ type: 'prepend', item });
+      setLink('');
+      setAddNote({
+        kind: 'done',
+        text: existed
+          ? 'Already in your ideas. It is at the top of Picked.'
+          : 'Added to the top of Picked.',
+      });
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 402)) void refreshMe();
+      setAddNote({
+        kind: 'error',
+        text: err instanceof Error ? err.message : 'Could not add that link.',
+      });
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const { items, nextCursor, selected } = state;
   const welcomed = justOnboarded.use();
 
@@ -176,8 +215,43 @@ export function Queue() {
       </div>
       <p className="lede queue-lede">
         Stories picked for your topics after each run. Pick the ones worth making something about
-        and skip the rest. Your picks and skips shape what the next run suggests.
+        and skip the rest, or save anything from Read, or paste a link below. Your picks and skips
+        shape what the next run suggests.
       </p>
+      <form className="field addlink" onSubmit={(e) => void addLink(e)} noValidate>
+        <label className="field-label" htmlFor="addlink-input">
+          Add a link
+        </label>
+        <div className="field-row">
+          <input
+            id="addlink-input"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder="https://"
+            value={link}
+            disabled={adding}
+            aria-invalid={addNote?.kind === 'error' || undefined}
+            aria-describedby="addlink-note"
+            onChange={(e) => {
+              setLink(e.target.value);
+              if (addNote?.kind === 'error') setAddNote(null);
+            }}
+          />
+          <button type="submit" className="btn" disabled={adding || !link.trim()}>
+            {adding ? 'Adding' : 'Add'}
+          </button>
+        </div>
+        <p
+          id="addlink-note"
+          className={addNote?.kind === 'error' ? 'addlink-note warn' : 'addlink-note'}
+          role={addNote?.kind === 'error' ? 'alert' : 'status'}
+        >
+          {adding ? 'Reading the page\u2026' : (addNote?.text ?? '')}
+        </p>
+      </form>
       <Tabs
         tabs={STATUSES.map((s) => ({ id: s, label: STATUS_LABEL[s] }))}
         active={status}
@@ -226,6 +300,18 @@ export function Queue() {
             </p>
             <p className="meta">{error}</p>
           </div>
+        )}
+
+        {adding && load !== 'loading' && (
+          <ol className="items" aria-hidden="true">
+            <li className="qrow skeleton">
+              <span className="rank" />
+              <div className="item-body">
+                <div className="bar" style={{ width: '78%' }} />
+                <div className="bar short" style={{ width: '52%' }} />
+              </div>
+            </li>
+          </ol>
         )}
 
         {(load === 'ready' || load === 'more') &&

@@ -6,10 +6,11 @@ import type { Prefs } from '../lib/prefs';
 import { rankFeed } from '../lib/rankClient';
 import {
   ALL_TOPICS,
+  effectiveKinds,
   selectView,
   topicTabs,
-  visibleSourceFilters,
-  type SourceFilter,
+  visibleSourceKinds,
+  type SourceKind,
 } from '../lib/view';
 import { CustomizeSheet } from './CustomizeSheet';
 import { ItemList, Skeleton } from './ItemList';
@@ -28,6 +29,7 @@ interface Props {
   syncError: boolean;
   onNiches: (niches: Niche[]) => void;
   onToggleSource: (id: string) => void;
+  onSourceKinds: (kinds: SourceKind[]) => void;
   onStartOver: () => void;
   onShowAll: () => void;
   /** The session or the account's saved topics are still loading. */
@@ -44,12 +46,12 @@ export function ReadView({
   syncError,
   onNiches,
   onToggleSource,
+  onSourceKinds,
   onStartOver,
   onShowAll,
   settling,
 }: Props) {
   const [topic, setTopic] = useState<string>(ALL_TOPICS);
-  const [source, setSource] = useState<SourceFilter>('all');
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const ranked = useMemo(
@@ -62,11 +64,25 @@ export function ReadView({
 
   const tabs = useMemo(() => (prefs ? topicTabs(prefs.niches) : []), [prefs]);
   const activeTopic = tabs.some((t) => t.id === topic) ? topic : ALL_TOPICS;
-  const sourceOptions = useMemo(() => visibleSourceFilters(prefs?.sources ?? []), [prefs]);
-  const activeSource = sourceOptions.some((o) => o.id === source) ? source : 'all';
+  const sourceOptions = useMemo(() => visibleSourceKinds(prefs?.sources ?? []), [prefs]);
+  const savedKinds = prefs?.sourceKinds ?? [];
+  const activeKinds = useMemo(
+    () =>
+      effectiveKinds(
+        savedKinds,
+        sourceOptions.map((o) => o.id),
+      ),
+    [savedKinds, sourceOptions],
+  );
+  const narrowed = activeKinds.length < sourceOptions.length;
   const rows = useMemo(
-    () => selectView(ranked, activeTopic === ALL_TOPICS ? null : activeTopic, activeSource),
-    [ranked, activeTopic, activeSource],
+    () =>
+      selectView(
+        ranked,
+        activeTopic === ALL_TOPICS ? null : activeTopic,
+        narrowed ? activeKinds : null,
+      ),
+    [ranked, activeTopic, activeKinds, narrowed],
   );
 
   const defaults = data.status === 'ready' ? data.defaults : null;
@@ -104,7 +120,7 @@ export function ReadView({
                   : ''}
             </p>
             <div className="subhead-actions">
-              <SourceMenu options={sourceOptions} value={activeSource} onChange={setSource} />
+              <SourceMenu options={sourceOptions} value={savedKinds} onChange={onSourceKinds} />
               {install && (
                 <button type="button" className="text-btn" onClick={install}>
                   Install app
@@ -131,19 +147,20 @@ export function ReadView({
               prefs &&
               (rows.length > 0 ? (
                 <ItemList
-                  key={`${activeTopic}:${activeSource}`}
+                  key={`${activeTopic}:${activeKinds.join(',')}`}
                   items={rows}
                   niches={prefs.niches}
                   now={now}
+                  saveable
                 />
               ) : (
                 <EmptyState
                   topic={activeTopic !== ALL_TOPICS}
-                  source={activeSource !== 'all'}
+                  source={narrowed}
                   onCustomize={() => setSheetOpen(true)}
                   onClearFilter={() => {
                     setTopic(ALL_TOPICS);
-                    setSource('all');
+                    onSourceKinds([]);
                   }}
                 />
               ))}

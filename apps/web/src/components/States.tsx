@@ -14,7 +14,7 @@ export function EmptyState({ topic, source, onCustomize, onClearFilter }: EmptyP
         {topic
           ? 'No stories in the feed match this topic right now.'
           : source
-            ? 'No stories from this source right now.'
+            ? 'No stories from the sources you picked right now.'
             : 'No stories match your topics right now.'}{' '}
         {filtered && (
           <>

@@ -1,8 +1,9 @@
 import type { Niche } from '@radar/core/ranking';
 import type { Defaults, SourceRef } from './feed';
+import { isSourceKind, type SourceKind } from './view';
 
 export const PREFS_KEY = 'signal-radar:prefs';
-export const PREFS_VERSION = 1;
+export const PREFS_VERSION = 2;
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -12,6 +13,8 @@ export interface StoredPrefs {
   niches: Niche[] | null;
   /** Ids of default sources the user switched off (new default sources stay on). */
   disabledSources: string[];
+  /** Source kinds ticked in the Read menu; empty means every source. */
+  sourceKinds: SourceKind[];
   /** Chose "skip, show everything": no topics, ranked by momentum only. */
   showAll: boolean;
   theme: Theme;
@@ -21,6 +24,8 @@ export interface Prefs {
   niches: Niche[];
   sources: SourceRef[];
   theme: Theme;
+  /** Source kinds the Read view is narrowed to; empty means all of them. */
+  sourceKinds: SourceKind[];
   /** No topics chosen and not skipped: the Read view asks first. */
   needsTopics: boolean;
 }
@@ -31,6 +36,7 @@ export const emptyPrefs = (): StoredPrefs => ({
   version: PREFS_VERSION,
   niches: null,
   disabledSources: [],
+  sourceKinds: [],
   showAll: false,
   theme: 'system',
 });
@@ -58,7 +64,10 @@ const isNiche = (n: unknown): n is Niche => {
   );
 };
 
-/** Reads saved prefs; corrupt data or a different schema version falls back to the defaults. */
+/**
+ * Reads saved prefs; corrupt data or an unknown schema version falls back to the defaults.
+ * Version 1 (no source selection) is carried over as it is.
+ */
 export function loadPrefs(storage: PrefsStorage): StoredPrefs {
   let raw: unknown;
   try {
@@ -68,7 +77,7 @@ export function loadPrefs(storage: PrefsStorage): StoredPrefs {
     return emptyPrefs();
   }
   const p = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  if (p.version !== PREFS_VERSION) return emptyPrefs();
+  if (p.version !== PREFS_VERSION && p.version !== 1) return emptyPrefs();
   return {
     version: PREFS_VERSION,
     niches:
@@ -76,6 +85,7 @@ export function loadPrefs(storage: PrefsStorage): StoredPrefs {
     disabledSources: Array.isArray(p.disabledSources)
       ? p.disabledSources.filter((s): s is string => typeof s === 'string')
       : [],
+    sourceKinds: Array.isArray(p.sourceKinds) ? p.sourceKinds.filter(isSourceKind) : [],
     showAll: p.showAll === true,
     theme: p.theme === 'light' || p.theme === 'dark' ? p.theme : 'system',
   };
@@ -106,6 +116,7 @@ export function resolvePrefs(stored: StoredPrefs, defaults: Defaults): Prefs {
     niches,
     sources: defaults.sources.filter((s) => !off.has(s.id)),
     theme: stored.theme,
+    sourceKinds: stored.sourceKinds,
     needsTopics: niches.length === 0 && !stored.showAll,
   };
 }

@@ -1736,3 +1736,97 @@ kbd {
 .confirm-q {
   font-size: 14px;
 }
+
+/* ---------- source menu: several sources at once ---------- */
+
+.srcmenu-list {
+  right: 0;
+  left: auto;
+  min-width: 210px;
+}
+.srcmenu-all {
+  margin-bottom: 4px;
+  padding-bottom: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.menu-item[aria-disabled='true'] {
+  cursor: default;
+}
+.menu-item[aria-disabled='true']:hover {
+  background: none;
+}
+.menu-item:focus-visible {
+  background: var(--raised);
+  outline-offset: -2px;
+}
+
+/* ---------- save to Ideas, under a story ---------- */
+
+.item-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 12px;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.item-save .link-quiet {
+  min-height: 32px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.item-save .link-quiet:hover,
+.item-save .link-quiet:focus-visible {
+  color: var(--text);
+}
+.item-save-done {
+  align-items: center;
+  min-height: 32px;
+}
+.item-save-done .link-quiet {
+  color: var(--text-2);
+}
+.item-save-note {
+  flex-basis: 100%;
+  max-width: 44ch;
+  padding-bottom: 6px;
+  text-wrap: pretty;
+}
+@media (hover: hover) and (pointer: fine) {
+  /* Idle, the action sits at the end of the last line and takes no room of its own. */
+  .item-body {
+    position: relative;
+  }
+  .item-save-idle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+  }
+  .item:not(:hover):not(:focus-within) .item-save-idle {
+    opacity: 0;
+  }
+  .item-save {
+    transition: opacity 120ms ease-out;
+  }
+  .item-save .link-quiet {
+    min-height: 28px;
+  }
+}
+
+/* ---------- add a link on Ideas ---------- */
+
+.addlink {
+  max-width: 32rem;
+  margin-bottom: 24px;
+}
+.addlink-note {
+  min-height: 20px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.addlink-note.warn {
+  color: var(--crimson);
+}

@@ -58,15 +58,38 @@ describe('prefs storage', () => {
     const old = JSON.stringify({ version: 0, niches: [custom], theme: 'dark' });
     expect(loadPrefs(memory({ [PREFS_KEY]: old }).storage)).toEqual(emptyPrefs());
     const bad = JSON.stringify({
-      version: 1,
+      version: 2,
       niches: [{ id: 'x', name: 'X', weight: 1, keywords: [] }],
       disabledSources: ['hn', 5],
+      sourceKinds: ['reddit', 'nope', 3],
       theme: 'neon',
     });
     expect(loadPrefs(memory({ [PREFS_KEY]: bad }).storage)).toEqual({
       ...emptyPrefs(),
       disabledSources: ['hn'],
+      sourceKinds: ['reddit'],
     });
+  });
+
+  it('carries version 1 prefs over with every source on', () => {
+    const v1 = JSON.stringify({
+      version: 1,
+      niches: [custom],
+      disabledSources: ['reddit'],
+      showAll: false,
+      theme: 'dark',
+    });
+    expect(loadPrefs(memory({ [PREFS_KEY]: v1 }).storage)).toEqual({
+      ...emptyPrefs(),
+      niches: [custom],
+      disabledSources: ['reddit'],
+      theme: 'dark',
+    });
+  });
+
+  it('keeps the ticked sources through resolve', () => {
+    const stored = { ...emptyPrefs(), sourceKinds: ['hn' as const] };
+    expect(resolvePrefs(stored, defaults).sourceKinds).toEqual(['hn']);
   });
 
   it('reports a failed write instead of throwing', () => {
@@ -107,6 +130,7 @@ describe('resolvePrefs', () => {
       niches: [],
       sources: defaults.sources,
       theme: 'system',
+      sourceKinds: [],
       needsTopics: true,
     });
   });

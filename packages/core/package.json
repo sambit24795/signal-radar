@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./ranking": "./src/ranking.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

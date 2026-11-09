@@ -13,3 +13,4 @@ coverage
 
 # generated output (data/seen.json stays committed)
 data/feed.json
+dist

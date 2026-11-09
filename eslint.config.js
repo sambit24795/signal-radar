@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['node_modules', 'data', 'coverage', 'pnpm-lock.yaml', '**/fixtures/**'] },
+  { ignores: ['node_modules', 'data', 'coverage', '**/dist', 'pnpm-lock.yaml', '**/fixtures/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -10,14 +10,16 @@
   "scripts": {
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web",
     "test": "vitest run",
     "radar": "tsx apps/cli/src/index.ts",
     "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter @radar/db generate",
     "db:migrate": "pnpm --filter @radar/db migrate",
-    "api:dev": "tsx watch --env-file-if-exists=.env apps/api/src/server.ts"
+    "api:dev": "tsx watch --env-file-if-exists=.env apps/api/src/server.ts",
+    "web:dev": "pnpm --filter @radar/web dev",
+    "web:build": "pnpm --filter @radar/web build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

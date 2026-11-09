@@ -6,6 +6,12 @@ export const ApiEnvSchema = z.object({
   WEB_ORIGIN: z.string().url(),
   LEMONSQUEEZY_WEBHOOK_SECRET: z.string().optional(),
   PAYMENTS_PROVIDER: z.enum(['stub', 'lemonsqueezy']).default('stub'),
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
   NODE_ENV: z.string().optional(),
 });
 export type ApiEnv = z.infer<typeof ApiEnvSchema>;

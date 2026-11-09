@@ -105,4 +105,33 @@ describe.skipIf(!available)('createPgStore + runForUsers', () => {
     expect(fb.picked).toEqual([{ title: 'One', source: 's', niches: ['steam'] }]);
     expect(fb.skipped).toEqual([]);
   });
+
+  it('loads push subscriptions per user, deletes by endpoint and clears telegram', async () => {
+    await addUser('ann', { status: 'active' });
+    await addUser('bob', { status: 'active' });
+    await db.update(schema.userConfig).set({ telegramChatId: '42' });
+    const keys = { p256dh: 'p', auth: 'a' };
+    await db.insert(schema.pushSubscription).values([
+      { userId: 'ann', endpoint: 'https://p.test/1', keys },
+      { userId: 'ann', endpoint: 'https://p.test/2', keys },
+    ]);
+    const store = createPgStore(db);
+    const users = await store.listProUsers(NOW);
+    const subs = (id: string) => users.find((u) => u.id === id)?.pushSubscriptions;
+    expect(subs('ann')?.map((s) => s.endpoint)).toEqual(['https://p.test/1', 'https://p.test/2']);
+    expect(subs('bob')).toEqual([]);
+
+    await store.deletePushSubscriptions(['https://p.test/1', 'https://unknown.test']);
+    await store.deletePushSubscriptions([]);
+    expect((await db.select().from(schema.pushSubscription)).map((r) => r.endpoint)).toEqual([
+      'https://p.test/2',
+    ]);
+
+    await store.clearTelegram('ann');
+    const cfg = await db.select().from(schema.userConfig);
+    expect(Object.fromEntries(cfg.map((c) => [c.userId, c.telegramChatId]))).toEqual({
+      ann: null,
+      bob: '42',
+    });
+  });
 });

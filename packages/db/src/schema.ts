@@ -229,3 +229,16 @@ export const pushSubscription = pgTable(
   },
   (t) => [index('push_subscription_user_idx').on(t.userId)],
 );
+
+/** One-time token behind the `t.me/<bot>?start=<token>` link that connects a user's Telegram chat. */
+export const telegramLink = pgTable(
+  'telegram_link',
+  {
+    token: text('token').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [index('telegram_link_user_idx').on(t.userId)],
+);

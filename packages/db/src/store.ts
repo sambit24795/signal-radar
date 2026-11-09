@@ -42,6 +42,22 @@ export function createPgStore(db: Db): RadarStore {
           ),
         )
         .orderBy(schema.user.createdAt);
+      const subs = new Map<
+        string,
+        { endpoint: string; keys: { p256dh: string; auth: string } }[]
+      >();
+      for (const part of chunks(rows.map((r) => r.id))) {
+        const found = await db
+          .select()
+          .from(schema.pushSubscription)
+          .where(inArray(schema.pushSubscription.userId, part))
+          .orderBy(schema.pushSubscription.createdAt);
+        for (const s of found) {
+          const list = subs.get(s.userId) ?? [];
+          list.push({ endpoint: s.endpoint, keys: s.keys });
+          subs.set(s.userId, list);
+        }
+      }
       return rows.map(({ id, email, cfg }) => ({
         id,
         email,
@@ -57,6 +73,7 @@ export function createPgStore(db: Db): RadarStore {
         topN: cfg.topN,
         customFeeds: cfg.customFeeds,
         telegramChatId: cfg.telegramChatId,
+        pushSubscriptions: subs.get(id) ?? [],
         notion: cfg.notion,
       }));
     },
@@ -167,6 +184,21 @@ export function createPgStore(db: Db): RadarStore {
           .values(part.map((url) => ({ userId, url, seenAt: now })))
           .onConflictDoNothing();
       }
+    },
+
+    async deletePushSubscriptions(endpoints) {
+      for (const part of chunks(endpoints)) {
+        await db
+          .delete(schema.pushSubscription)
+          .where(inArray(schema.pushSubscription.endpoint, part));
+      }
+    },
+
+    async clearTelegram(userId) {
+      await db
+        .update(schema.userConfig)
+        .set({ telegramChatId: null })
+        .where(eq(schema.userConfig.userId, userId));
     },
   };
 }

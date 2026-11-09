@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { eq } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
+import { eq, lt, or } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   assertPublicUrlSyntax,
@@ -17,6 +18,7 @@ import { badRequest, isPro, parseBody } from '../http.js';
 import { requireAuth, requirePro } from '../middleware.js';
 
 export const MAX_CUSTOM_FEEDS = 15;
+export const TELEGRAM_LINK_TTL_MS = 15 * 60 * 1000;
 
 const CustomFeedSchema = z
   .object({
@@ -48,7 +50,8 @@ const ConfigBody = z.object({
     .max(MAX_CUSTOM_FEEDS)
     .refine((fs) => new Set(fs.map((f) => f.id)).size === fs.length, 'duplicate feed URL')
     .optional(),
-  telegramChatId: z.string().min(1).nullable(),
+  /** Omitted keeps the stored chat id (the Telegram connect flow sets it). */
+  telegramChatId: z.string().min(1).nullable().optional(),
   /** `token` may be omitted to keep the stored one. */
   notion: z.object({ token: z.string().min(1).optional(), dbId: z.string().min(1) }).nullable(),
 });
@@ -62,6 +65,13 @@ function publicConfig(cfg: typeof schema.userConfig.$inferSelect) {
   };
 }
 
+/** The bot can only be connected when it has a token, a public username and a webhook secret. */
+export function telegramAvailable(env: RouteDeps['env']): boolean {
+  return Boolean(
+    env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_BOT_USERNAME && env.TELEGRAM_WEBHOOK_SECRET,
+  );
+}
+
 export function meRoutes(deps: RouteDeps) {
   const { db } = deps;
   const r = new Hono<AppVars>();
@@ -73,8 +83,14 @@ export function meRoutes(deps: RouteDeps) {
       .select()
       .from(schema.subscription)
       .where(eq(schema.subscription.userId, u.id));
+    const [cfg] = await db
+      .select({ telegramChatId: schema.userConfig.telegramChatId })
+      .from(schema.userConfig)
+      .where(eq(schema.userConfig.userId, u.id));
     return c.json({
       user: { id: u.id, name: u.name, email: u.email },
+      telegramConnected: Boolean(cfg?.telegramChatId),
+      telegramAvailable: telegramAvailable(deps.env),
       subscription: sub
         ? {
             plan: sub.plan,
@@ -123,6 +139,30 @@ export function meRoutes(deps: RouteDeps) {
       .onConflictDoUpdate({ target: schema.userConfig.userId, set: values })
       .returning();
     return c.json({ config: cfg && publicConfig(cfg) });
+  });
+
+  r.post('/telegram/link', requirePro(deps), async (c) => {
+    const username = deps.env.TELEGRAM_BOT_USERNAME;
+    if (!telegramAvailable(deps.env) || !username) {
+      return c.json({ error: 'Telegram is not configured' }, 503);
+    }
+    const userId = c.get('user').id;
+    const token = randomBytes(24).toString('base64url');
+    const t = schema.telegramLink;
+    await db.delete(t).where(or(eq(t.userId, userId), lt(t.expiresAt, new Date())));
+    await db
+      .insert(t)
+      .values({ token, userId, expiresAt: new Date(Date.now() + TELEGRAM_LINK_TTL_MS) });
+    return c.json({ url: `https://t.me/${username.replace(/^@/, '')}?start=${token}` });
+  });
+
+  r.delete('/telegram', async (c) => {
+    const userId = c.get('user').id;
+    await db
+      .update(schema.userConfig)
+      .set({ telegramChatId: null })
+      .where(eq(schema.userConfig.userId, userId));
+    return c.json({ ok: true });
   });
 
   r.post('/feeds/check', requirePro(deps), async (c) => {

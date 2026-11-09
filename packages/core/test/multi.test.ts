@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   defineConfig,
+  type PushSender,
   emptyFeedback,
   runForUsers,
   type Enriched,
@@ -71,6 +72,8 @@ const user = (id: string, extra: Partial<RadarUser> = {}): RadarUser => ({
 });
 
 function memoryStore(users: RadarUser[], failFor: string[] = []) {
+  const deletedSubs: string[] = [];
+  const cleared: string[] = [];
   const feed: ScoredItem[] = [];
   const seen = new Map<string, Set<string>>();
   const queue = new Map<string, Enriched[]>();
@@ -95,8 +98,14 @@ function memoryStore(users: RadarUser[], failFor: string[] = []) {
       for (const u of urls) s.add(u);
       seen.set(id, s);
     },
+    deletePushSubscriptions: async (endpoints) => {
+      deletedSubs.push(...endpoints);
+    },
+    clearTelegram: async (id) => {
+      cleared.push(id);
+    },
   };
-  return { store, feed, seen, queue };
+  return { store, feed, seen, queue, deletedSubs, cleared };
 }
 
 describe('runForUsers', () => {
@@ -141,6 +150,93 @@ describe('runForUsers', () => {
     expect(bodies).toHaveLength(1);
     expect(JSON.parse(bodies[0] ?? '{}')).toMatchObject({ chat_id: '42' });
     expect(out.users.map((u) => u.digestSent)).toEqual([true, false]);
+  });
+
+  describe('web push and telegram cleanup', () => {
+    const subA = { endpoint: 'https://push.test/a', keys: { p256dh: 'p', auth: 'a' } };
+    const subB = { endpoint: 'https://push.test/b', keys: { p256dh: 'p', auth: 'a' } };
+
+    it('sends one push per subscription when items were queued, and counts them', async () => {
+      const sent: { endpoint: string; payload: string; ttl: number }[] = [];
+      const push: PushSender = async (sub, payload, o) => {
+        sent.push({ endpoint: sub.endpoint, payload, ttl: o.ttl });
+      };
+      const m = memoryStore([user('ann', { pushSubscriptions: [subA, subB] }), user('bob')]);
+      const out = await runForUsers(config, m.store, { env, fetch: routes(), now: NOW, push });
+      expect(out.users.map((u) => u.pushSent)).toEqual([2, 0]);
+      expect(sent.map((x) => x.endpoint)).toEqual([subA.endpoint, subB.endpoint]);
+      expect(JSON.parse(sent[0]?.payload ?? '{}')).toMatchObject({
+        title: '3 new in your queue',
+        url: '/queue',
+        tag: 'queue',
+      });
+      expect(sent[0]?.ttl).toBe(43200);
+    });
+
+    it('sends nothing when the run queued nothing new', async () => {
+      let calls = 0;
+      const push: PushSender = async () => {
+        calls++;
+      };
+      const m = memoryStore([user('ann', { pushSubscriptions: [subA] })]);
+      await runForUsers(config, m.store, { env, fetch: routes(), now: NOW, push });
+      expect(calls).toBe(1);
+      const again = await runForUsers(config, m.store, { env, fetch: routes(), now: NOW, push });
+      expect(again.users[0]).toMatchObject({ queued: 0, pushSent: 0 });
+      expect(calls).toBe(1);
+    });
+
+    it('is disabled without a sender or VAPID env, with no warnings', async () => {
+      const m = memoryStore([user('ann', { pushSubscriptions: [subA] })]);
+      const out = await runForUsers(config, m.store, { env, fetch: routes(), now: NOW });
+      expect(out.users[0]).toMatchObject({ queued: 3, pushSent: 0 });
+      expect(out.warnings.filter((w) => w.startsWith('ann'))).toEqual([]);
+    });
+
+    it('deletes gone subscriptions and warns on other failures without failing the user', async () => {
+      const push: PushSender = async (sub) => {
+        const err = Object.assign(new Error('x'), {
+          statusCode: sub.endpoint === subA.endpoint ? 410 : 500,
+        });
+        throw err;
+      };
+      const m = memoryStore([user('ann', { pushSubscriptions: [subA, subB] })]);
+      const out = await runForUsers(config, m.store, { env, fetch: routes(), now: NOW, push });
+      expect(m.deletedSubs).toEqual([subA.endpoint]);
+      expect(out.users[0]).toMatchObject({ queued: 3, pushSent: 0 });
+      expect(out.users[0]?.error).toBeUndefined();
+      expect(out.warnings.some((w) => w.includes('push HTTP 500'))).toBe(true);
+      expect(out.warnings.join()).not.toContain('push.test');
+    });
+
+    it('clears the telegram chat id when the bot was blocked (403)', async () => {
+      const f = routedFetch({
+        'gol.test': () => res(fixture('gol.xml')),
+        'other.test': () => res('', 500),
+        'api.deepseek.com': () => res(reply(0)),
+        'api.telegram.org': () => res('{"ok":false}', 403),
+      });
+      const m = memoryStore([
+        user('ann', { telegramChatId: '42' }),
+        user('bob', { telegramChatId: '43' }),
+      ]);
+      const out = await runForUsers(config, m.store, { env, fetch: f, now: NOW });
+      expect(m.cleared).toEqual(['ann', 'bob']);
+      expect(out.users[0]?.digestSent).toBe(false);
+      expect(out.warnings.join()).not.toContain('tb');
+    });
+
+    it('keeps the chat id on other telegram errors', async () => {
+      const f = routedFetch({
+        'gol.test': () => res(fixture('gol.xml')),
+        'other.test': () => res('', 500),
+        'api.deepseek.com': () => res(reply(0)),
+        'api.telegram.org': () => res('{"ok":false}', 500),
+      });
+      const m = memoryStore([user('ann', { telegramChatId: '42' })]);
+      await runForUsers(config, m.store, { env, fetch: f, now: NOW });
+      expect(m.cleared).toEqual([]);
+    });
   });
 
   it('drops urls the user has seen, so a second run queues nothing new', async () => {

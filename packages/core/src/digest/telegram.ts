@@ -17,9 +17,44 @@ export function formatDigest(items: Enriched[], created: number): string {
   return lines.join('\n').slice(0, 4000);
 }
 
+/** A Bot API failure. Carries the HTTP status but never the URL (it holds the bot token). */
+export class TelegramError extends Error {
+  constructor(readonly status: number) {
+    super(`telegram HTTP ${status}`);
+    this.name = 'TelegramError';
+  }
+}
+
+async function postMessage(
+  fetchFn: FetchFn,
+  token: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const res = await fetchFn(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new TelegramError(res.status);
+}
+
+/** Plain-text reply to a chat. Throws `TelegramError` on an API error. */
+export async function sendMessage(
+  fetchFn: FetchFn,
+  token: string,
+  chatId: string | number,
+  text: string,
+): Promise<void> {
+  await postMessage(fetchFn, token, {
+    chat_id: chatId,
+    text,
+    link_preview_options: { is_disabled: true },
+  });
+}
+
 /**
  * Send the digest. Returns false (without calling the API) when the token or chat id is unset;
- * throws on an API error so the caller can warn.
+ * throws a `TelegramError` on an API error so the caller can warn (403 = the user blocked the bot).
  */
 export async function sendDigest(
   fetchFn: FetchFn,
@@ -30,17 +65,11 @@ export async function sendDigest(
   const token = env.TELEGRAM_BOT_TOKEN;
   const chatId = env.TELEGRAM_CHAT_ID;
   if (!token || !chatId || items.length === 0) return false;
-  const res = await fetchFn(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: formatDigest(items, created),
-      parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true },
-    }),
+  await postMessage(fetchFn, token, {
+    chat_id: chatId,
+    text: formatDigest(items, created),
+    parse_mode: 'HTML',
+    link_preview_options: { is_disabled: true },
   });
-  // Never put the URL (it holds the bot token) in the error.
-  if (!res.ok) throw new Error(`telegram HTTP ${res.status}`);
   return true;
 }

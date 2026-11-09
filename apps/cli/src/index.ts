@@ -25,8 +25,11 @@ const USAGE = `usage:
   radar user:list                       users with plan, status, trial end, niches
   radar user:pro --email <e>            dev: make a user Pro/active
   radar notion:init --parent <pageId>   create the Topic Queue database, print its id
+  radar telegram:webhook <publicBaseUrl>  point the bot at <base>/api/telegram/webhook (needs TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET)
+  radar telegram:webhook --delete       remove the bot webhook
 
 env (also read from ./.env): DATABASE_URL, DEEPSEEK_API_KEY, TELEGRAM_BOT_TOKEN, GITHUB_TOKEN,
+  VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (Web Push),
   and for --local: NOTION_TOKEN, NOTION_DB_ID, TELEGRAM_CHAT_ID`;
 
 async function loadConfig(file: string): Promise<{ config: RadarConfig; root: string }> {
@@ -98,7 +101,7 @@ async function cmdRunDb(values: { config: string }) {
       console.log(
         `  ${(u.email ?? u.userId).padEnd(28)} candidates ${u.candidates}, scored ${u.scored}` +
           `, failed ${u.scoringFailed}, queued ${u.queued}, seen +${u.seenMarked}` +
-          `, telegram ${u.digestSent ? 'sent' : 'skipped'}` +
+          `, telegram ${u.digestSent ? 'sent' : 'skipped'}, push ${u.pushSent}` +
           (u.notion
             ? `, notion ${u.notion.created}+${u.notion.updated}/${u.notion.failed} failed`
             : '') +
@@ -221,6 +224,40 @@ async function cmdNotionInit(values: { parent?: string }) {
   console.log('Set that as the NOTION_DB_ID secret / env var.');
 }
 
+async function cmdTelegramWebhook(base: string | undefined, remove: boolean) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('set TELEGRAM_BOT_TOKEN');
+  let body: Record<string, unknown>;
+  let method: string;
+  if (remove) {
+    method = 'deleteWebhook';
+    body = {};
+  } else {
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (!secret) throw new Error('set TELEGRAM_WEBHOOK_SECRET');
+    if (!base) throw new Error('usage: radar telegram:webhook <publicBaseUrl> | --delete');
+    const url = new URL(base);
+    if (url.protocol !== 'https:') throw new Error('the public base URL must be https');
+    method = 'setWebhook';
+    body = {
+      url: `${url.origin}${url.pathname.replace(/\/+$/, '')}/api/telegram/webhook`,
+      secret_token: secret,
+      allowed_updates: ['message'],
+    };
+  }
+  // Never print the URL (it holds the bot token).
+  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
+  if (!res.ok || !json.ok) {
+    throw new Error(`telegram ${method} failed: ${json.description ?? `HTTP ${res.status}`}`);
+  }
+  console.log(remove ? 'webhook removed' : `webhook set to ${String(body.url)}`);
+}
+
 async function cmdSources(values: { config: string }) {
   const { config } = await loadConfig(values.config);
   const sources = buildSources(config.sources, { rsshubBase: config.rsshubBase });
@@ -241,6 +278,7 @@ async function main() {
       'data-dir': { type: 'string' },
       parent: { type: 'string' },
       local: { type: 'boolean', default: false },
+      delete: { type: 'boolean', default: false },
       email: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -254,6 +292,7 @@ async function main() {
   if (cmd === 'user:pro') return cmdUserPro(values);
   if (cmd === 'sources') return cmdSources(values);
   if (cmd === 'notion:init') return cmdNotionInit(values);
+  if (cmd === 'telegram:webhook') return cmdTelegramWebhook(positionals[1], values.delete);
   console.error(`unknown command: ${cmd}\n${USAGE}`);
   process.exitCode = 1;
 }

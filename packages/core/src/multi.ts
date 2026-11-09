@@ -1,4 +1,11 @@
-import { sendDigest } from './digest/telegram.js';
+import {
+  createPushSender,
+  formatPush,
+  sendPush,
+  type PushSender,
+  type PushSubscriptionInfo,
+} from './digest/push.js';
+import { sendDigest, TelegramError } from './digest/telegram.js';
 import { mapLimit } from './concurrency.js';
 import { createFetch, type FetchFn } from './http.js';
 import { fetchPublicText, type Resolver } from './netguard.js';
@@ -34,6 +41,8 @@ export interface RadarUser {
   /** Their own RSS/Atom feeds; items reach only this user's candidate pool. */
   customFeeds?: CustomFeed[];
   telegramChatId?: string | null;
+  /** Browsers this user enabled Web Push on. */
+  pushSubscriptions?: PushSubscriptionInfo[];
   notion?: { token: string; dbId: string } | null;
 }
 
@@ -53,6 +62,10 @@ export interface RadarStore {
   /** Insert queue rows, ignoring urls already queued. Returns the number inserted. */
   insertQueue(userId: string, items: Enriched[]): Promise<number>;
   markSeen(userId: string, urls: string[], now: Date): Promise<void>;
+  /** Drop push subscriptions the push service reported as gone. */
+  deletePushSubscriptions(endpoints: string[]): Promise<void>;
+  /** Forget the user's Telegram chat id (the bot was blocked). */
+  clearTelegram(userId: string): Promise<void>;
 }
 
 export interface MultiRunOptions {
@@ -61,6 +74,8 @@ export interface MultiRunOptions {
   fetch?: FetchFn;
   /** Overrides DNS resolution for custom feeds (tests). */
   resolve?: Resolver;
+  /** Overrides the Web Push sender; defaults to `web-push` when the VAPID env is set (tests). */
+  push?: PushSender | null;
   /** Overrides the Notion client factory (tests). */
   notion?: (token: string) => NotionLike;
   now?: Date;
@@ -80,6 +95,8 @@ export interface UserRunResult {
   queued: number;
   seenMarked: number;
   digestSent: boolean;
+  /** Push notifications delivered (one per subscribed browser). */
+  pushSent: number;
   notion?: { created: number; updated: number; failed: number };
   error?: string;
 }
@@ -146,6 +163,7 @@ export async function runForUsers(
   // 3. Per Pro user.
   const provider = createProvider(config, env, warn, opts.fetch);
   const fetchFn = opts.fetch ?? createFetch(config.fetchTimeoutMs);
+  const pushSender = opts.push === undefined ? createPushSender(env) : opts.push;
   const users = (await store.listProUsers(now)).filter((u) => u.niches.length > 0);
   // Custom feeds: each distinct URL fetched once, never written to the public feed.
   const customRaw = await fetchCustomFeeds(users, fetchFn, opts.resolve, warn);
@@ -162,6 +180,7 @@ export async function runForUsers(
       queued: 0,
       seenMarked: 0,
       digestSent: false,
+      pushSent: 0,
     };
     out.push(res);
     const uwarn = (m: string) => warn(`${user.email ?? user.id}: ${m}`);
@@ -229,6 +248,25 @@ export async function runForUsers(
           );
         } catch (e) {
           uwarn(`telegram: ${(e as Error).message}`);
+          if (e instanceof TelegramError && e.status === 403) {
+            // The user blocked the bot: stop sending until they reconnect.
+            await store
+              .clearTelegram(user.id)
+              .catch((err: Error) => uwarn(`telegram: ${err.message}`));
+          }
+        }
+      }
+
+      const subs = user.pushSubscriptions ?? [];
+      if (pushSender && res.queued > 0 && subs.length > 0) {
+        try {
+          const top = delivered.length > 0 ? delivered : toQueue;
+          const sent = await sendPush(pushSender, subs, formatPush(top, res.queued));
+          res.pushSent = sent.sent;
+          for (const m of new Set(sent.errors)) uwarn(m);
+          if (sent.gone.length > 0) await store.deletePushSubscriptions(sent.gone);
+        } catch (e) {
+          uwarn(`push: ${(e as Error).message}`);
         }
       }
 

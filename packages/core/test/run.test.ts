@@ -33,6 +33,7 @@ const reply = (n: number) =>
           content: JSON.stringify({
             score: 90 - n,
             why: 'w',
+            summary: 's',
             hook: 'h',
             angle: 'a',
             title: 't',

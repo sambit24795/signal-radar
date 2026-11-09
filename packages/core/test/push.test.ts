@@ -28,6 +28,7 @@ const item = (title: string, aiTitle?: string): Enriched => ({
         ai: {
           score: 80,
           why: 'w',
+          summary: 's',
           hook: 'h',
           angle: 'a',
           title: aiTitle,

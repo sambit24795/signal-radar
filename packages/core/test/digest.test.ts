@@ -19,6 +19,7 @@ const item: Enriched = {
   ai: {
     score: 88.4,
     why: 'w',
+    summary: 's',
     hook: 'Hook <b>',
     angle: 'a',
     title: 'Nice & title',

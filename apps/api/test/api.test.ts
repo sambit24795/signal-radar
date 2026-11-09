@@ -359,6 +359,26 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect(resB.items[0].url).toBe('https://example.com/b0');
     });
 
+    it('returns summary, why and effort', async () => {
+      const a = await signUp(ctx.app, 'a@example.com');
+      await ctx.db.insert(schema.queueItem).values([
+        {
+          userId: a.id,
+          url: 'https://example.com/x',
+          title: 'X',
+          source: 'hn',
+          summary: 'S.',
+          why: 'W',
+          effort: 'M',
+        },
+        { userId: a.id, url: 'https://example.com/y', title: 'Y', source: 'hn' },
+      ]);
+      const res = (await (await call(ctx.app, '/api/queue', { user: a })).json()) as Json;
+      const byTitle = Object.fromEntries(res.items.map((i: Json) => [i.title, i]));
+      expect(byTitle.X).toMatchObject({ summary: 'S.', why: 'W', effort: 'M' });
+      expect(byTitle.Y).toMatchObject({ summary: null, why: null, effort: null });
+    });
+
     it("cannot pick, skip or reset another user's item", async () => {
       const a = await signUp(ctx.app, 'a@example.com');
       const b = await signUp(ctx.app, 'b@example.com');

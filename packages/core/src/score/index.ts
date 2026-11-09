@@ -3,7 +3,8 @@ import { createFetch, type FetchFn } from '../http.js';
 import type { RadarConfig, ScoredItem } from '../schema.js';
 import { anthropicProvider } from './anthropic.js';
 import { deepseekProvider } from './deepseek.js';
-import { noneProvider } from './none.js';
+import { compileNiches } from '../prefilter.js';
+import { noneFallback, noneProvider } from './none.js';
 import { buildSystemPrompt, buildUserPrompt } from './prompt.js';
 import {
   AiScoreSchema,
@@ -16,7 +17,7 @@ import {
 
 export * from './types.js';
 export { buildSystemPrompt, buildUserPrompt } from './prompt.js';
-export { noneProvider } from './none.js';
+export { noneProvider, noneFallback, cleanSnippet, matchReason } from './none.js';
 export { deepseekProvider } from './deepseek.js';
 export { anthropicProvider } from './anthropic.js';
 
@@ -100,7 +101,13 @@ export async function scoreItems(
   },
 ): Promise<ScoreResult> {
   const top = items.slice(0, opts.limit);
-  if (provider.id === 'none') return { items: top, failed: [] };
+  if (provider.id === 'none') {
+    const compiled = compileNiches(opts.niches);
+    return {
+      items: top.map((i) => ({ ...i, fallback: noneFallback(i, opts.niches, compiled) })),
+      failed: [],
+    };
+  }
   const system = buildSystemPrompt(opts.niches, opts.feedback ?? emptyFeedback());
   const scored = await mapLimit(top, opts.concurrency, async (item) => ({
     item,

@@ -5,6 +5,7 @@ import {
   deepseekProvider,
   buildSystemPrompt,
   noneProvider,
+  cleanSnippet,
   parseAiScore,
   scoreItems,
   type Provider,
@@ -14,6 +15,7 @@ import { niches, res } from './helpers.js';
 const good = {
   score: 82,
   why: 'Fresh and demoable.',
+  summary: Array.from({ length: 60 }, (_, i) => `w${i}`).join(' '),
   hook: 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen',
   angle: 'Show it running on the Deck.',
   title: 'Claude on a Steam Deck',
@@ -54,6 +56,12 @@ describe('parseAiScore', () => {
     const a = parseAiScore('```json\n' + JSON.stringify(good) + '\n```');
     expect(a.hook.split(' ')).toHaveLength(12);
     expect(a.score).toBe(82);
+  });
+  it('clamps the summary to 45 words and requires it', () => {
+    expect(parseAiScore(JSON.stringify(good)).summary.split(' ')).toHaveLength(45);
+    const noSummary: Partial<typeof good> = { ...good };
+    delete noSummary.summary;
+    expect(() => parseAiScore(JSON.stringify(noSummary))).toThrow();
   });
   it('rejects bad enums and out-of-range scores', () => {
     expect(() => parseAiScore(JSON.stringify({ ...good, format: 'medium' }))).toThrow();
@@ -103,6 +111,32 @@ describe('scoreItems', () => {
     expect(r.items).toHaveLength(1);
     expect(r.items[0]?.ai).toBeUndefined();
   });
+
+  it('none provider fills summary and why from the snippet and niche', async () => {
+    const html: ScoredItem = {
+      ...item(1),
+      title: 'Claude agent ships',
+      snippet: '<p>Anthropic  released   a <b>new</b> agent &amp; SDK.</p>',
+      niches: ['ai'],
+    };
+    const bare: ScoredItem = { ...item(2), snippet: '', niches: ['ai'] };
+    const r = await scoreItems(noneProvider, [html, bare], opts);
+    expect(r.items[0]?.fallback?.summary).toBe('Anthropic released a new agent & SDK.');
+    expect(r.items[0]?.fallback?.why).toBe('Matches AI: claude, agent');
+    expect(r.items[1]?.fallback?.summary).toBeNull();
+  });
+});
+
+describe('cleanSnippet', () => {
+  it('caps at 280 chars on a sentence, else a word, boundary', () => {
+    const sentences = Array.from({ length: 30 }, () => 'This is a sentence.').join(' ');
+    const a = cleanSnippet(sentences)!;
+    expect(a.length).toBeLessThanOrEqual(280);
+    expect(a.endsWith('.')).toBe(true);
+    const b = cleanSnippet('word '.repeat(100))!;
+    expect(b.length).toBeLessThanOrEqual(281);
+    expect(b.endsWith('…')).toBe(true);
+  });
 });
 
 describe('prompt', () => {
@@ -112,6 +146,7 @@ describe('prompt', () => {
       skipped: [{ title: 'Skipped thing' }],
     });
     expect(sys).toContain('ai: AI');
+    expect(sys).toContain('"summary"');
     expect(sys).toContain('PICKED');
     expect(sys).toContain('Picked thing');
     expect(sys).toContain('SKIPPED');

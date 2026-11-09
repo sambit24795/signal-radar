@@ -26,6 +26,7 @@ const item = (url = 'https://example.com/a'): Enriched => ({
   ai: {
     score: 77,
     why: 'Because.',
+    summary: 'Something happened.',
     hook: 'A hook',
     angle: 'An angle',
     title: 'Better title',

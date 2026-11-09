@@ -24,7 +24,8 @@ export function buildSystemPrompt(niches: Niche[], feedback: Feedback): string {
 - evergreen vs. news (news decays fast, evergreen keeps paying)
 Be harsh: most items deserve under 50. Give 80+ only for items that clearly deserve a video this week.`,
     `Reply with one JSON object and nothing else, in exactly this shape:
-{"score": 0-100 number, "why": "one sentence reason", "hook": "opening line, at most 12 words", "angle": "one sentence on how to cover it", "title": "video title", "format": "short" | "long" | "skip", "effort": "S" | "M" | "L"}
+{"score": 0-100 number, "why": "one sentence reason", "summary": "1-2 plain sentences, at most 45 words", "hook": "opening line, at most 12 words", "angle": "one sentence on how to cover it", "title": "video title", "format": "short" | "long" | "skip", "effort": "S" | "M" | "L"}
+summary says what the story actually is: facts only, no hype, no opinion, no mention of the creator.
 Use format "skip" when it is not worth a video. effort is S (under 2h), M (half a day) or L (multi-day).`,
   ];
   if (feedback.picked.length) {

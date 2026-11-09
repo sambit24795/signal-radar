@@ -7,6 +7,11 @@ const words = (s: string, n: number) => s.trim().split(/\s+/).slice(0, n).join('
 export const AiScoreSchema = z.object({
   score: z.coerce.number().min(0).max(100),
   why: z.string().min(1),
+  /** Clamped to 45 words rather than rejected, like `hook`. */
+  summary: z
+    .string()
+    .min(1)
+    .transform((s) => words(s, 45)),
   /** Clamped to 12 words rather than rejected: the limit is a style rule, not a data error. */
   hook: z
     .string()
@@ -22,6 +27,8 @@ export type AiScore = z.infer<typeof AiScoreSchema>;
 /** A scored item: the keyword-ranked item plus the model's verdict (absent in `none` mode). */
 export interface Enriched extends ScoredItem {
   ai?: AiScore;
+  /** Plain-text stand-in for `ai.summary` / `ai.why` when no model ran (`none` mode). */
+  fallback?: { summary: string | null; why: string };
 }
 
 export type ProviderId = 'none' | 'deepseek' | 'anthropic';

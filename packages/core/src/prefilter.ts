@@ -1,8 +1,8 @@
 import type { Item, Niche } from './schema.js';
 
-interface Compiled {
+export interface Compiled {
   niche: Niche;
-  terms: { re: RegExp; weight: number }[];
+  terms: { term: string; re: RegExp; weight: number }[];
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -13,7 +13,11 @@ export function compileNiches(niches: Niche[]): Compiled[] {
     terms: niche.keywords.map((k) => {
       const term = typeof k === 'string' ? k : k.term;
       const weight = typeof k === 'string' ? 1 : k.weight;
-      return { re: new RegExp(`(^|[^a-z0-9])${escape(term)}(?:e?s)?($|[^a-z0-9])`, 'i'), weight };
+      return {
+        term,
+        re: new RegExp(`(^|[^a-z0-9])${escape(term)}(?:e?s)?($|[^a-z0-9])`, 'i'),
+        weight,
+      };
     }),
   }));
 }

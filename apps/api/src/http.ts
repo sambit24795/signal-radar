@@ -29,12 +29,18 @@ function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ');
 }
 
-/** Pro = active, or trialing with an unexpired trial. */
+/**
+ * Pro = active, trialing with an unexpired trial, or canceled while still on the pro plan
+ * with an unexpired paid period (stub cancel keeps access until `currentPeriodEnd`).
+ */
 export function isPro(
-  sub: Pick<Subscription, 'status' | 'trialEndsAt'> | undefined,
+  sub: Pick<Subscription, 'status' | 'trialEndsAt' | 'plan' | 'currentPeriodEnd'> | undefined,
   now = new Date(),
 ): boolean {
   if (!sub) return false;
   if (sub.status === 'active') return true;
+  if (sub.status === 'canceled') {
+    return sub.plan === 'pro' && sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
+  }
   return sub.status === 'trialing' && sub.trialEndsAt !== null && sub.trialEndsAt > now;
 }

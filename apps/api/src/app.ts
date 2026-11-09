@@ -9,6 +9,7 @@ import { meRoutes } from './routes/me.js';
 import { queueRoutes } from './routes/queue.js';
 import { pushRoutes } from './routes/push.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { billingRoutes } from './routes/billing.js';
 import { devRoutes } from './routes/dev.js';
 
 export interface AppDeps {
@@ -40,6 +41,7 @@ export function createApp({ db, env }: AppDeps) {
   app.route('/api/feed', feedRoutes(deps));
   app.route('/api/me', meRoutes(deps));
   app.route('/api/queue', queueRoutes(deps));
+  app.route('/api/billing', billingRoutes(deps));
   app.route('/api/push', pushRoutes(deps));
   app.route('/api/webhooks', webhookRoutes(deps));
   if (env.NODE_ENV !== 'production') app.route('/api/dev', devRoutes(deps));

@@ -91,6 +91,8 @@ describe.skipIf(!dbAvailable)('api', () => {
       ['POST', '/api/push/subscribe'],
       ['DELETE', '/api/push/subscribe'],
       ['POST', '/api/dev/upgrade'],
+      ['POST', '/api/billing/checkout'],
+      ['POST', '/api/billing/cancel'],
     ])('%s %s -> 401 without a session', async (method, path) => {
       const res = await call(ctx.app, path, { method, json: method === 'GET' ? undefined : {} });
       expect(res.status).toBe(401);
@@ -334,6 +336,67 @@ describe.skipIf(!dbAvailable)('api', () => {
       } finally {
         await prod.close();
       }
+    });
+  });
+
+  describe('billing (stub)', () => {
+    const subOf = async (id: string) =>
+      (
+        await ctx.db.select().from(schema.subscription).where(eq(schema.subscription.userId, id))
+      )[0];
+
+    it('checkout upgrades to pro/active and works in production', async () => {
+      const prod = await setup({ NODE_ENV: 'production' });
+      try {
+        const u = await signUp(prod.app, 'a@example.com');
+        await prod.db
+          .update(schema.subscription)
+          .set({ status: 'none', plan: 'free', trialEndsAt: null })
+          .where(eq(schema.subscription.userId, u.id));
+        expect((await call(prod.app, '/api/queue', { user: u })).status).toBe(402);
+        const res = await call(prod.app, '/api/billing/checkout', { method: 'POST', user: u });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ url: null, upgraded: true });
+        expect((await call(prod.app, '/api/queue', { user: u })).status).toBe(200);
+      } finally {
+        await prod.close();
+      }
+    });
+
+    it('checkout returns 501 for the lemonsqueezy provider', async () => {
+      const ls = await setup({ PAYMENTS_PROVIDER: 'lemonsqueezy' });
+      try {
+        const u = await signUp(ls.app, 'a@example.com');
+        const res = await call(ls.app, '/api/billing/checkout', { method: 'POST', user: u });
+        expect(res.status).toBe(501);
+      } finally {
+        await ls.close();
+      }
+    });
+
+    it('cancel keeps access until currentPeriodEnd, then gates', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      await call(ctx.app, '/api/billing/checkout', { method: 'POST', user: u });
+      const res = await call(ctx.app, '/api/billing/cancel', { method: 'POST', user: u });
+      expect(res.status).toBe(200);
+      expect(await subOf(u.id)).toMatchObject({ plan: 'pro', status: 'canceled' });
+      const me = (await (await call(ctx.app, '/api/me', { user: u })).json()) as Json;
+      expect(me.subscription).toMatchObject({ status: 'canceled', isPro: true });
+      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(200);
+
+      await ctx.db
+        .update(schema.subscription)
+        .set({ currentPeriodEnd: new Date(Date.now() - 1000) })
+        .where(eq(schema.subscription.userId, u.id));
+      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(402);
+      const me2 = (await (await call(ctx.app, '/api/me', { user: u })).json()) as Json;
+      expect(me2.subscription.isPro).toBe(false);
+    });
+
+    it('cancel 409s without an active subscription', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      const res = await call(ctx.app, '/api/billing/cancel', { method: 'POST', user: u });
+      expect(res.status).toBe(409);
     });
   });
 

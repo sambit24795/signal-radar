@@ -5,6 +5,7 @@ export const ApiEnvSchema = z.object({
   BETTER_AUTH_URL: z.string().url(),
   WEB_ORIGIN: z.string().url(),
   LEMONSQUEEZY_WEBHOOK_SECRET: z.string().optional(),
+  PAYMENTS_PROVIDER: z.enum(['stub', 'lemonsqueezy']).default('stub'),
   NODE_ENV: z.string().optional(),
 });
 export type ApiEnv = z.infer<typeof ApiEnvSchema>;

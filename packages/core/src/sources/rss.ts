@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import { getText } from '../http.js';
+import { getText, HttpError } from '../http.js';
 import type { MediaType, RawItem, SourceConfig } from '../schema.js';
 import { stripHtml, truncate } from '../text.js';
 import type { BuildOptions, Source, SourceContext } from './types.js';
@@ -158,9 +158,19 @@ export function createRss(cfg: RssConfig, opts: BuildOptions): Source {
     status,
     async fetch(ctx: SourceContext) {
       if (resolved === null) return [];
-      const xml = await getText(ctx.fetch, resolved, {
+      const headers = {
         accept: 'application/atom+xml, application/rss+xml, application/xml, text/xml, */*',
-      });
+      };
+      let xml: string;
+      try {
+        xml = await getText(ctx.fetch, resolved, headers);
+      } catch (e) {
+        // YouTube's feed endpoint intermittently answers 404 for valid channels; one retry fixes it.
+        const flaky =
+          e instanceof HttpError && e.status === 404 && resolved.includes('youtube.com/feeds/');
+        if (!flaky) throw e;
+        xml = await getText(ctx.fetch, resolved, headers);
+      }
       return parseFeed(xml, { mediaType: cfg.mediaType, tags: cfg.tags });
     },
   };

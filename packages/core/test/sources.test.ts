@@ -180,6 +180,32 @@ describe('rss / atom', () => {
   });
 });
 
+describe('youtube feed flakiness', () => {
+  it('retries a 404 once, then succeeds', async () => {
+    let n = 0;
+    const f = routedFetch({
+      'youtube.com/feeds': () => (n++ === 0 ? res('nf', 404) : res(fixture('yt.xml'))),
+    });
+    const src = buildSource(
+      cfg({
+        type: 'rss',
+        name: 'YT',
+        url: 'https://www.youtube.com/feeds/videos.xml?channel_id=X',
+      }),
+      {},
+    );
+    expect((await src.fetch(makeCtx(f))).length).toBeGreaterThan(0);
+    expect(f.calls).toHaveLength(2);
+  });
+
+  it('does not retry 404s on other hosts', async () => {
+    const f = routedFetch({ 'other.test': () => res('nf', 404) });
+    const src = buildSource(cfg({ type: 'rss', name: 'O', url: 'https://other.test/feed' }), {});
+    await expect(src.fetch(makeCtx(f))).rejects.toThrow(/404/);
+    expect(f.calls).toHaveLength(1);
+  });
+});
+
 describe('graceful failure', () => {
   it('turns throwing, erroring and disabled sources into warnings and empty results', async () => {
     const fetch = routedFetch({

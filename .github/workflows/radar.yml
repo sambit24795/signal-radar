@@ -1,0 +1,52 @@
+name: Radar
+
+on:
+  schedule:
+    # twice a day, UTC
+    - cron: '0 3 * * *'
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+# Needed to commit the updated seen store back.
+permissions:
+  contents: write
+
+# Never run two radars at once: they would race on data/seen.json.
+concurrency:
+  group: radar
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run radar
+        run: pnpm radar run
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Lifts the GitHub search rate limit (403 when unauthenticated).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit the seen store
+        run: |
+          if git diff --quiet -- data/seen.json; then
+            echo "seen store unchanged; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/seen.json
+          git commit -m "chore(data): update seen store [skip ci]"
+          git pull --rebase
+          git push

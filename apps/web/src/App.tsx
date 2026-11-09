@@ -205,14 +205,16 @@ export function App() {
           )}
         </main>
 
-        <footer className="footer">
-          <p>
-            Pro adds AI-scored hooks and a personal queue.{' '}
-            <Link to="pricing" className="link">
-              See Pricing
-            </Link>
-          </p>
-        </footer>
+        {route.name !== 'pricing' && !(me.status === 'ready' && me.me.subscription.isPro) && (
+          <footer className="footer">
+            <p>
+              Pro adds AI-scored hooks and a personal queue.{' '}
+              <Link to="pricing" className="link">
+                See Pricing
+              </Link>
+            </p>
+          </footer>
+        )}
       </div>
     </>
   );

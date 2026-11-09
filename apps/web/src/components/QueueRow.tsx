@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ItemActions } from './ItemActions';
 import { copyText, queueMeta, type QueueItem, type QueueStatus } from '../lib/queue';
 
 interface Props {
@@ -99,6 +100,8 @@ export function QueueRow({ item, now, selected, hint, onDismissHint, onSelect, o
           {more ? 'Less' : 'More'}
         </button>
       )}
+
+      <ItemActions url={item.url} title={item.title} />
 
       <div className="q-actions">
         {item.status !== 'picked' && (

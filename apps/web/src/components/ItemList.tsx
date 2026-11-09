@@ -1,13 +1,13 @@
 import type { Niche, ScoredItem } from '@radar/core/ranking';
 import { matchedKeywords } from '../lib/keywords';
 import { metaParts } from '../lib/view';
-import { SaveToIdeas } from './SaveToIdeas';
+import { ItemActions } from './ItemActions';
 
 interface Props {
   items: ScoredItem[];
   niches: Niche[];
   now: number;
-  /** Show "Save to Ideas" under each story (the Read view). */
+  /** Show "Save to Ideas" and "Summarize" under each story (the Read view). */
   saveable?: boolean;
 }
 
@@ -30,7 +30,7 @@ export function ItemList({ items, niches, now, saveable = false }: Props) {
               </h2>
               <p className="meta">{metaParts(item, now).join(' · ')}</p>
               {keywords.length > 0 && <p className="keywords">{keywords.join(', ')}</p>}
-              {saveable && <SaveToIdeas item={item} niche={niche} />}
+              {saveable && <ItemActions url={item.url} title={item.title} save={{ item, niche }} />}
             </div>
           </li>
         );

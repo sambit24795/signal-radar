@@ -13,7 +13,7 @@ interface Props {
   niche: string | null;
 }
 
-/** A quiet "Save to Ideas" under a story. Pro saves it; everyone else gets a short note. */
+/** A quiet "Save to Ideas" action for a story (it sits in the item's action row). Pro saves it; everyone else gets a short note. */
 export function SaveToIdeas({ item, niche }: Props) {
   const me = useMe();
   const saved = savedLinks.use().get(item.url);
@@ -25,7 +25,7 @@ export function SaveToIdeas({ item, niche }: Props) {
 
   if (saved) {
     return (
-      <p className="item-save item-save-done" role="status">
+      <span className="item-save-done" role="status">
         {saved === 'existing' ? 'Saved' : 'Saved to Ideas'}
         <Link
           to="queue"
@@ -35,7 +35,7 @@ export function SaveToIdeas({ item, niche }: Props) {
         >
           Open
         </Link>
-      </p>
+      </span>
     );
   }
 
@@ -60,9 +60,7 @@ export function SaveToIdeas({ item, niche }: Props) {
   };
 
   return (
-    <div
-      className={phase === 'idle' || phase === 'saving' ? 'item-save item-save-idle' : 'item-save'}
-    >
+    <>
       <button
         type="button"
         className="link-quiet"
@@ -101,6 +99,6 @@ export function SaveToIdeas({ item, niche }: Props) {
           .
         </span>
       )}
-    </div>
+    </>
   );
 }

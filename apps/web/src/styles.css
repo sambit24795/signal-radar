@@ -1761,28 +1761,30 @@ kbd {
   outline-offset: -2px;
 }
 
-/* ---------- save to Ideas, under a story ---------- */
+/* ---------- quiet actions under a story: Save to Ideas, Summarize ---------- */
 
-.item-save {
+.item-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0 12px;
+  gap: 0 18px;
   margin-top: 2px;
   font-size: 13px;
   color: var(--text-2);
 }
-.item-save .link-quiet {
+.item-actions .link-quiet {
   min-height: 32px;
   font-size: 13px;
   color: var(--text-3);
 }
-.item-save .link-quiet:hover,
-.item-save .link-quiet:focus-visible {
+.item-actions .link-quiet:hover,
+.item-actions .link-quiet:focus-visible {
   color: var(--text);
 }
 .item-save-done {
+  display: inline-flex;
   align-items: center;
+  gap: 12px;
   min-height: 32px;
 }
 .item-save-done .link-quiet {
@@ -1794,24 +1796,79 @@ kbd {
   padding-bottom: 6px;
   text-wrap: pretty;
 }
+.item-actions .item-save-note {
+  order: 5;
+}
+
+/* the summary, opened under the story */
+.sum {
+  max-width: 62ch;
+  margin: 4px 0 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.sum-tldr {
+  font: 400 18px/1.4 var(--serif);
+  color: var(--text);
+  text-wrap: pretty;
+}
+.sum-points {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.sum-points li {
+  position: relative;
+  padding-left: 18px;
+  text-wrap: pretty;
+}
+.sum-points li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.78em;
+  width: 8px;
+  height: 1px;
+  background: var(--text-3);
+}
+.sum-foot {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.sum-note {
+  font-size: 14px;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+.sum-retry {
+  display: inline;
+  min-height: 0;
+}
 @media (hover: hover) and (pointer: fine) {
-  /* Idle, the action sits at the end of the last line and takes no room of its own. */
+  /* On Read, idle actions sit at the end of the last line and take no room of their own. */
   .item-body {
     position: relative;
   }
-  .item-save-idle {
+  .item .item-actions:not(:has([role='status'], [role='alert'], [aria-expanded='true'])) {
     position: absolute;
     right: 0;
     bottom: 0;
     margin: 0;
   }
-  .item:not(:hover):not(:focus-within) .item-save-idle {
+  .item:not(:hover):not(:focus-within)
+    .item-actions:not(:has([role='status'], [role='alert'], [aria-expanded='true'])) {
     opacity: 0;
   }
-  .item-save {
+  .item-actions {
     transition: opacity 120ms ease-out;
   }
-  .item-save .link-quiet {
+  .item-actions .link-quiet {
     min-height: 28px;
   }
 }

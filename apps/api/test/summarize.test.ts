@@ -29,6 +29,7 @@ const netFetch = async (url: string): Promise<Response> => {
   if (host === 'short.example') return new Response(SHORT);
   if (host === 'gone.example') return new Response('', { status: 404 });
   if (host === 'down.example') return new Response('', { status: 503 });
+  if (host === 'busy.example') return new Response('', { status: 429 });
   throw new Error(`unexpected fetch ${url}`);
 };
 const netResolve = async (host: string) =>
@@ -92,9 +93,10 @@ describe.skipIf(!dbAvailable)('summarize (POST /api/summarize)', () => {
     expect(pageFetches).toBe(2);
   });
 
-  it('does not cache transient failures (5xx, bad model reply)', async () => {
+  it('does not cache transient failures (429, 5xx, bad model reply)', async () => {
     const u = await signUp(ctx.app, 'a@example.com');
     expect((await summarize(u, 'https://down.example/a')).status).toBe(502);
+    expect((await summarize(u, 'https://busy.example/a')).status).toBe(502);
     aiBody = 'not json';
     expect((await summarize(u, 'https://article.example/a')).status).toBe(502);
     expect(await ctx.db.select().from(schema.pageSummary)).toHaveLength(0);

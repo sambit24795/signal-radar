@@ -102,3 +102,21 @@ User asked (2026-11-10) to search for an article or topic from the app.
   style (with Summarize / Save to Ideas). Empty, loading and error states. Query in the URL (`/read?q=`).
 - Tests: API fan-out with mocked fetch (one source failing), rate limit, dedupe; web filter + URL sync.
   Commit `feat: search the feed and live sources`.
+
+## Step F: a useful free account (after D-web + E land)
+
+Decided with the user 2026-11-10. AI spend stays Pro-only; free accounts get the no-AI parts.
+
+- **Pipeline:** `listProUsers` → `listQueueUsers` returning Pro users and signed-in free users (with topics). Free users
+  get the `none` provider (keyword rank + snippet summary + plain "why"), `topN` capped at 10, no Telegram, push,
+  Notion or custom feeds. Pro unchanged. Add `RadarUser.plan: 'pro'|'free'`.
+- **API gating:** `/api/queue` (list, pick/skip/reset, POST add) opens to any signed-in user. Free adds skip AI
+  enrichment (page metadata only) and are capped at 10/24 h (Pro stays 30). `/api/summarize`: cached results free
+  and unlimited for any signed-in user; new (uncached) summaries: free 3/24 h, Pro 100/24 h; 429 message for free
+  says how Pro differs. Custom feeds, Telegram, push stay Pro.
+- **Web:** Ideas, Save to Ideas, Add a link, Summarize work for free accounts. On free queue rows, one quiet locked
+  line where Hook/Angle/Title draft would be ("Hooks, angles and title drafts come with Pro" → Pricing). Summarize
+  shows remaining free count only after the first use ("2 left today"). Gates for signed-out users stay (sign-in
+  prompt). Update Pricing page's Free vs Pro lists and the landing page's tier summary to match.
+- Tests: pipeline gives free users none-scored items capped at 10 and no digest; gating per route; summarize cache
+  hit free for free users; free daily caps. Commit `feat: free accounts get the Ideas queue and 3 summaries a day`.

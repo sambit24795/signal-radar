@@ -11,6 +11,7 @@ import {
   createProvider,
   fetchPublicText,
   noneFallback,
+  noneProvider,
   normalizeItem,
   scoreKeywords,
   scoreOne,
@@ -25,7 +26,7 @@ import { createPgStore, schema, type QueueStatus } from '@radar/db';
 import radarConfig from '../../../../radar.config.js';
 import type { AppVars, RouteDeps } from '../app.js';
 import { badRequest, parseBody, parseQuery } from '../http.js';
-import { requireAuth, requirePro } from '../middleware.js';
+import { requireAuth, userIsPro } from '../middleware.js';
 
 const PAGE_SIZE = 20;
 const QueueQuery = z.object({
@@ -33,6 +34,7 @@ const QueueQuery = z.object({
   cursor: z.string().optional(),
 });
 export const MAX_ADDS_PER_DAY = 30;
+export const MAX_FREE_ADDS_PER_DAY = 10;
 const ADD_WINDOW_MS = 24 * 60 * 60 * 1000;
 const AI_TIMEOUT_MS = 20_000;
 const DEFAULT_SOURCE = 'Added by you';
@@ -85,7 +87,7 @@ export function queueRoutes(deps: RouteDeps) {
   const { db } = deps;
   const q = schema.queueItem;
   const r = new Hono<AppVars>();
-  r.use('*', requireAuth(deps), requirePro(deps));
+  r.use('*', requireAuth(deps));
 
   r.get('/', async (c) => {
     const userId = c.get('user').id;
@@ -150,9 +152,15 @@ export function queueRoutes(deps: RouteDeps) {
           gt(q.createdAt, new Date(Date.now() - ADD_WINDOW_MS)),
         ),
       );
-    if (n >= MAX_ADDS_PER_DAY) {
+    const pro = await userIsPro(db, userId);
+    const cap = pro ? MAX_ADDS_PER_DAY : MAX_FREE_ADDS_PER_DAY;
+    if (n >= cap) {
       return c.json(
-        { error: `You can add up to ${MAX_ADDS_PER_DAY} items a day. Try again tomorrow.` },
+        {
+          error: pro
+            ? `You can add up to ${cap} items a day. Try again tomorrow.`
+            : `Free accounts can add up to ${cap} items a day. Pro raises that to ${MAX_ADDS_PER_DAY}.`,
+        },
         429,
       );
     }
@@ -212,12 +220,15 @@ export function queueRoutes(deps: RouteDeps) {
     let ai: AiScore | null = null;
     const warn = (m: string) => console.warn(`queue add: ${m}`);
     try {
-      const provider = createProvider(
-        radarConfig,
-        process.env,
-        warn,
-        deps.net?.fetch ?? createFetch(AI_TIMEOUT_MS),
-      );
+      // Free accounts never spend model calls: page metadata and a snippet summary only.
+      const provider = !pro
+        ? noneProvider
+        : createProvider(
+            radarConfig,
+            process.env,
+            warn,
+            deps.net?.fetch ?? createFetch(AI_TIMEOUT_MS),
+          );
       if (provider.id !== 'none') {
         const feedback = await createPgStore(db).feedback(
           userId,

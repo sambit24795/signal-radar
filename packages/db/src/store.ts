@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Enriched, Feedback, FeedbackExample, RadarStore, ScoredItem } from '@radar/core';
 import type { Db } from './index.js';
 import * as schema from './schema.js';
@@ -16,32 +16,28 @@ function chunks<T>(xs: T[], n = CHUNK): T[][] {
 /** Postgres implementation of core's `RadarStore`. */
 export function createPgStore(db: Db): RadarStore {
   return {
-    async listProUsers(now) {
+    async listQueueUsers(now) {
+      // Every signed-in user with a config row; the subscription decides Pro or free.
       const rows = await db
         .select({
           id: schema.user.id,
           email: schema.user.email,
           cfg: schema.userConfig,
+          sub: schema.subscription,
         })
         .from(schema.user)
-        .innerJoin(schema.subscription, eq(schema.subscription.userId, schema.user.id))
         .innerJoin(schema.userConfig, eq(schema.userConfig.userId, schema.user.id))
-        .where(
-          or(
-            eq(schema.subscription.status, 'active'),
-            and(
-              eq(schema.subscription.status, 'trialing'),
-              gt(schema.subscription.trialEndsAt, now),
-            ),
-            // canceled keeps Pro until the paid period ends (mirrors isPro in apps/api)
-            and(
-              eq(schema.subscription.status, 'canceled'),
-              eq(schema.subscription.plan, 'pro'),
-              gt(schema.subscription.currentPeriodEnd, now),
-            ),
-          ),
-        )
+        .leftJoin(schema.subscription, eq(schema.subscription.userId, schema.user.id))
         .orderBy(schema.user.createdAt);
+      // Mirrors isPro in apps/api; canceled keeps Pro until the paid period ends.
+      const isPro = (sub: (typeof rows)[number]['sub']) =>
+        !!sub &&
+        (sub.status === 'active' ||
+          (sub.status === 'trialing' && !!sub.trialEndsAt && sub.trialEndsAt > now) ||
+          (sub.status === 'canceled' &&
+            sub.plan === 'pro' &&
+            !!sub.currentPeriodEnd &&
+            sub.currentPeriodEnd > now));
       const subs = new Map<
         string,
         { endpoint: string; keys: { p256dh: string; auth: string } }[]
@@ -58,9 +54,10 @@ export function createPgStore(db: Db): RadarStore {
           subs.set(s.userId, list);
         }
       }
-      return rows.map(({ id, email, cfg }) => ({
+      return rows.map(({ id, email, cfg, sub }) => ({
         id,
         email,
+        plan: isPro(sub) ? ('pro' as const) : ('free' as const),
         niches: cfg.niches.map((n) => ({
           id: n.id,
           name: n.name,

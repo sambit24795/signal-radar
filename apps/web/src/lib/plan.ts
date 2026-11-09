@@ -60,7 +60,9 @@ export function planSummary(sub: Subscription, now = Date.now()): PlanSummary {
     kind: 'free',
     title: 'Free',
     detail:
-      sub.status === 'none' ? 'The Read view and local niches.' : 'Your Pro access has ended.',
+      sub.status === 'none'
+        ? 'The Read view, an Ideas queue and 3 page summaries a day.'
+        : 'Your Pro access has ended. Ideas and 3 summaries a day stay.',
     canUpgrade: true,
     canCancel: false,
   };

@@ -1,5 +1,12 @@
 import type { ScoredItem } from '@radar/core/ranking';
-import { requestSummary, dispatchSummary, needsRequest, summaries, IDLE } from '../lib/summary';
+import {
+  requestSummary,
+  dispatchSummary,
+  freeLeft,
+  needsRequest,
+  summaries,
+  IDLE,
+} from '../lib/summary';
 import { useMe } from '../lib/me';
 import { Link } from './Link';
 import { SaveToIdeas } from './SaveToIdeas';
@@ -17,11 +24,17 @@ export function ItemActions({ url, title, save }: Props) {
   const state = summaries.use().get(url) ?? IDLE;
   const isPro = me.status === 'ready' && me.me.subscription.isPro;
   const signedIn = me.status === 'ready';
+  const left = freeLeft.use();
+  // Shown only once the account has used one, and never to Pro.
+  const leftNote =
+    signedIn && !isPro && left && left.remaining < left.limit
+      ? `${left.remaining} left today`
+      : null;
   const panelId = `sum-${url.replace(/[^a-z0-9]/gi, '').slice(-24)}`;
 
   const toggle = () => {
     if (state.open) return dispatchSummary(url, { type: 'toggle' });
-    if (!isPro) return dispatchSummary(url, { type: 'pitch' });
+    if (!signedIn) return dispatchSummary(url, { type: 'pitch' });
     if (needsRequest(state)) void requestSummary(url);
     else dispatchSummary(url, { type: 'toggle' });
   };
@@ -57,7 +70,10 @@ export function ItemActions({ url, title, save }: Props) {
                   ))}
                 </ul>
               )}
-              <p className="sum-foot">A machine summary of the page. It can miss things.</p>
+              <p className="sum-foot">
+                A machine summary of the page. It can miss things.
+                {leftNote && ` ${leftNote}.`}
+              </p>
             </>
           )}
           {state.status === 'unreadable' && (
@@ -83,24 +99,14 @@ export function ItemActions({ url, title, save }: Props) {
           )}
           {state.status === 'pitch' && (
             <p className="sum-note" role="status">
-              {signedIn
-                ? 'Summaries are part of Pro. '
-                : 'Summaries are part of Pro, and it starts with a free trial. '}
-              {signedIn ? (
-                <Link to="pricing" className="link">
-                  See Pricing
-                </Link>
-              ) : (
-                <>
-                  <Link to="signin" className="link">
-                    Sign in
-                  </Link>{' '}
-                  or{' '}
-                  <Link to="pricing" className="link">
-                    see Pricing
-                  </Link>
-                </>
-              )}
+              Summaries need an account.{' '}
+              <Link to="signin" signup className="link">
+                Create one
+              </Link>{' '}
+              or{' '}
+              <Link to="signin" className="link">
+                sign in
+              </Link>
               .
             </p>
           )}

@@ -13,14 +13,13 @@ interface Props {
   niche: string | null;
 }
 
-/** A quiet "Save to Ideas" action for a story (it sits in the item's action row). Pro saves it; everyone else gets a short note. */
+/** A quiet "Save to Ideas" action for a story (it sits in the item's action row). Any signed-in account saves it; signed-out visitors get a short note. */
 export function SaveToIdeas({ item, niche }: Props) {
   const me = useMe();
   const saved = savedLinks.use().get(item.url);
   const [phase, setPhase] = useState<Phase>('idle');
   const [message, setMessage] = useState('');
 
-  const isPro = me.status === 'ready' && me.me.subscription.isPro;
   const signedIn = me.status === 'ready';
 
   if (saved) {
@@ -40,7 +39,7 @@ export function SaveToIdeas({ item, niche }: Props) {
   }
 
   const save = async () => {
-    if (!isPro) {
+    if (!signedIn) {
       setPhase(phase === 'pitch' ? 'idle' : 'pitch');
       return;
     }
@@ -49,7 +48,7 @@ export function SaveToIdeas({ item, niche }: Props) {
       const { existed } = await addToIdeas(ideaBody(item, niche));
       markSaved(item.url, existed ? 'existing' : 'saved');
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 401 || e.status === 402)) {
+      if (e instanceof ApiError && e.status === 401) {
         void refreshMe();
         setPhase('pitch');
         return;
@@ -78,24 +77,14 @@ export function SaveToIdeas({ item, niche }: Props) {
       )}
       {phase === 'pitch' && (
         <span className="item-save-note" role="status">
-          {signedIn
-            ? 'Ideas is part of Pro. '
-            : 'Ideas is part of Pro, and it starts with a free trial. '}
-          {signedIn ? (
-            <Link to="pricing" className="link">
-              See Pricing
-            </Link>
-          ) : (
-            <>
-              <Link to="signin" className="link">
-                Sign in
-              </Link>{' '}
-              or{' '}
-              <Link to="pricing" className="link">
-                see Pricing
-              </Link>
-            </>
-          )}
+          Ideas keeps what you save to your account.{' '}
+          <Link to="signin" signup className="link">
+            Create one
+          </Link>{' '}
+          or{' '}
+          <Link to="signin" className="link">
+            sign in
+          </Link>
           .
         </span>
       )}

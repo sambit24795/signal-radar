@@ -14,14 +14,21 @@ export function requireAuth({ auth }: RouteDeps) {
   });
 }
 
+/** Does this user currently have Pro (active, unexpired trial, or paid period left)? */
+export async function userIsPro(db: RouteDeps['db'], userId: string): Promise<boolean> {
+  const [sub] = await db
+    .select()
+    .from(schema.subscription)
+    .where(eq(schema.subscription.userId, userId));
+  return isPro(sub);
+}
+
 /** Must run after requireAuth. */
 export function requirePro({ db }: RouteDeps) {
   return createMiddleware<AppVars>(async (c, next) => {
-    const [sub] = await db
-      .select()
-      .from(schema.subscription)
-      .where(eq(schema.subscription.userId, c.get('user').id));
-    if (!isPro(sub)) throw new HTTPException(402, { message: 'Pro subscription required' });
+    if (!(await userIsPro(db, c.get('user').id))) {
+      throw new HTTPException(402, { message: 'Pro subscription required' });
+    }
     await next();
   });
 }

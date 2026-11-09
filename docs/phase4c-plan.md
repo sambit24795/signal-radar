@@ -120,3 +120,32 @@ Decided with the user 2026-11-10. AI spend stays Pro-only; free accounts get the
   prompt). Update Pricing page's Free vs Pro lists and the landing page's tier summary to match.
 - Tests: pipeline gives free users none-scored items capped at 10 and no digest; gating per route; summarize cache
   hit free for free users; free daily caps. Commit `feat: free accounts get the Ideas queue and 3 summaries a day`.
+
+## Step G: marketing page (after F lands)
+
+User approved 2026-11-10. The phase 3b landing predates Ideas, Summarize, Search and the free-account changes.
+
+- **Rewrite `/`** around the current product, in the existing editorial parchment style (impeccable; phase 2 banned
+  list applies: no hero gradients, no feature-card grids, no emoji, no fake logos/testimonials/numbers). Beats, each
+  with a real product screenshot (light theme, captured from the running app with Playwright at 2x, cropped,
+  committed as optimized WebP under `apps/web/public/marketing/`, with a dark-theme variant via `<picture>` +
+  `prefers-color-scheme`): read the radar (topics) → search anything → summarize without opening → save to Ideas →
+  hooks, angles and title drafts (Pro) → digest on Telegram or push (Pro). Keep the live top-5 strip. Free vs Pro
+  matches Pricing exactly (single source of truth: reuse the same tier data module). CTAs: "Open the radar",
+  "Create a free account", "Start 7-day trial".
+- **FAQ** (plain `<details>`): what's free, what Pro costs ($5/mo, 7-day trial, cancel anytime), where stories come
+  from (list the sources), does it post anywhere (no, never), what the AI does and doesn't do, data and privacy in
+  one line, self-hosting (AGPL, link to the GitHub repo https://github.com/sambit24795/signal-radar).
+- **SEO/share:** one `<h1>`; per-route `<title>`/description for `/` and `/pricing`; Open Graph + Twitter card tags
+  (`summary_large_image`) with absolute URLs from a `VITE_SITE_URL` env (default `http://localhost:5173`, documented
+  in `.env.example` and README); a 1200x630 OG image in the parchment style generated from an HTML template via
+  Playwright → `apps/web/public/og.png`; `robots.txt` and `sitemap.xml` (/, /read, /pricing) generated at build from
+  `VITE_SITE_URL`.
+- **Pre-render** `/` and `/pricing` to static HTML at build (a small post-build script that renders the routes with
+  `react-dom/server` or Playwright against `vite preview` and writes `dist/index.html` + `dist/pricing/index.html`;
+  hydrate on load; the live top-5 strip fills in client-side). No new heavy framework. The SPA fallback must still
+  work for other routes.
+- Lighthouse (mobile) on the built landing: report Performance, Accessibility, Best Practices, SEO; fix anything
+  under 90 that's in reach.
+- Tests: tier data shared by Landing and Pricing; build script writes the pre-rendered files with the h1 and OG tags.
+  Commit `feat(web): marketing landing, FAQ, OG/SEO and pre-rendered landing and pricing`.

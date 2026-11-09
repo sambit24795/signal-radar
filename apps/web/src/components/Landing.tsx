@@ -16,7 +16,7 @@ const STEPS = [
   },
   {
     title: 'Make what is moving',
-    body: 'Free reads the ranked list. Pro adds a hook, an angle and a title for the best items, in a queue that learns from what you pick and skip.',
+    body: 'A free account keeps a queue of ranked stories and any link you save. Pro adds a hook, an angle and a title draft for each, and learns from what you pick and skip.',
   },
 ];
 
@@ -41,7 +41,8 @@ export function Landing({ data, now, retry }: { data: Data; now: number; retry: 
         <p className="hero-pitch">
           Signal Radar is an algorithm-free radar for creators. It reads Hacker News, Reddit, GitHub
           and the feeds you choose, ranks every story against the niches you follow, and shows you
-          what is moving. On Pro, the best of each run comes back as a queue of ready hooks.
+          what is moving. Each run lands in a queue you can pick from; on Pro, every item arrives
+          with a hook.
         </p>
         <div className="hero-actions">
           <Link to="read" className="btn btn-solid btn-lg">
@@ -51,7 +52,9 @@ export function Landing({ data, now, retry }: { data: Data; now: number; retry: 
             Start 7-day trial
           </Link>
         </div>
-        <p className="meta">Reading is free and needs no account.</p>
+        <p className="meta">
+          Reading is free and needs no account. A free account adds the Ideas queue.
+        </p>
       </section>
 
       <section className="lsec" aria-labelledby="landing-live">
@@ -138,8 +141,8 @@ export function Landing({ data, now, retry }: { data: Data; now: number; retry: 
                 <span className="price">$0</span>
               </p>
               <p>
-                The ranked radar across every source, with your niches saved on your device. No
-                account.
+                The ranked radar across every source, no account needed. A free account adds an
+                Ideas queue, saved links and 3 page summaries a day.
               </p>
             </div>
             <div className="plan">
@@ -149,8 +152,8 @@ export function Landing({ data, now, retry }: { data: Data; now: number; retry: 
                 <span className="meta"> per month, 7 days free</span>
               </p>
               <p>
-                The Ideas queue with a hook and angle for each item, your own RSS feeds, a Telegram
-                digest and Notion sync.
+                A hook, an angle and a title draft for each queued item, higher daily limits, your
+                own RSS feeds, a Telegram digest and Notion sync.
               </p>
             </div>
           </div>

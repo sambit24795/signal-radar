@@ -5,17 +5,18 @@ import { navigate } from '../lib/route';
 import { Link } from './Link';
 
 const FREE = [
-  'The ranked Read view across every source',
-  'Niches and sources saved on this device',
-  'No account needed',
+  'The ranked Read view across every source, no account needed',
+  'With an account: an Ideas queue of up to 10 new stories a run, ranked by your topics',
+  'Save any link to Ideas, up to 10 a day',
+  '3 new page summaries a day; ones already read are free',
 ];
 
 const PRO = [
-  'AI scoring for every item',
-  'A hook and an angle written for each one',
+  'Everything in Free, with higher limits: 30 saved links and 100 summaries a day',
+  'A hook, an angle and a title draft written for each queued story',
   'An Ideas queue that learns from what you pick and skip',
-  'A Telegram digest after each run',
-  'Picked items synced to Notion',
+  'Your own RSS feeds',
+  'A Telegram digest, web push and Notion sync',
 ];
 
 export function Pricing({ me }: { me: MeState }) {
@@ -47,7 +48,7 @@ export function Pricing({ me }: { me: MeState }) {
   return (
     <section aria-labelledby="pricing-title">
       <h2 id="pricing-title" className="page-title page-title-lg">
-        Free reads the radar. Pro works the queue.
+        Free keeps a queue. Pro writes the hooks.
       </h2>
 
       <div className="plans">
@@ -63,9 +64,15 @@ export function Pricing({ me }: { me: MeState }) {
               <li key={f}>{f}</li>
             ))}
           </ul>
-          <Link to="read" className="btn">
-            Open the radar
-          </Link>
+          {me.status === 'ready' ? (
+            <Link to="queue" className="btn">
+              Open Ideas
+            </Link>
+          ) : (
+            <Link to="signin" signup className="btn">
+              Create a free account
+            </Link>
+          )}
         </section>
 
         <section className="plan" aria-labelledby="plan-pro">

@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { ItemActions } from './ItemActions';
+import { Link } from './Link';
 import { copyText, queueMeta, type QueueItem, type QueueStatus } from '../lib/queue';
 
 interface Props {
   item: QueueItem;
   now: number;
   selected: boolean;
+  /** Free account: hooks, angles and title drafts are a Pro feature. */
+  locked: boolean;
   /** Show the one-time "what Pick and Skip do" line under this item. */
   hint: boolean;
   onDismissHint: () => void;
@@ -14,7 +17,16 @@ interface Props {
 }
 
 /** One idea: the story, what it is, then the angle on it. Pick and Skip say what they do. */
-export function QueueRow({ item, now, selected, hint, onDismissHint, onSelect, onDecide }: Props) {
+export function QueueRow({
+  item,
+  now,
+  selected,
+  locked,
+  hint,
+  onDismissHint,
+  onSelect,
+  onDecide,
+}: Props) {
   const ref = useRef<HTMLLIElement>(null);
   const [more, setMore] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -99,6 +111,15 @@ export function QueueRow({ item, now, selected, hint, onDismissHint, onSelect, o
         >
           {more ? 'Less' : 'More'}
         </button>
+      )}
+
+      {locked && !item.hook && !item.angle && !item.titleDraft && (
+        <p className="q-locked">
+          Hooks, angles and title drafts come with Pro.{' '}
+          <Link to="pricing" className="link">
+            See Pricing
+          </Link>
+        </p>
       )}
 
       <ItemActions url={item.url} title={item.title} />

@@ -79,7 +79,7 @@ function memoryStore(users: RadarUser[], failFor: string[] = []) {
   const seen = new Map<string, Set<string>>();
   const queue = new Map<string, Enriched[]>();
   const store: RadarStore = {
-    listProUsers: async () => users,
+    listQueueUsers: async () => users,
     upsertFeed: async (items) => {
       feed.push(...items);
       return items.length;
@@ -310,6 +310,57 @@ describe('runForUsers', () => {
     expect(out.users[0]).toMatchObject({ queued: 3, seenMarked: 3, digestSent: false });
     expect(fetch.calls.some((u) => u.includes('deepseek'))).toBe(false);
     expect(m.queue.get('ann')?.every((i) => !i.ai)).toBe(true);
+  });
+
+  describe('free accounts', () => {
+    const subA = { endpoint: 'https://push.test/a', keys: { p256dh: 'p', auth: 'a' } };
+    const many = `<?xml version="1.0"?><rss version="2.0"><channel><title>Many</title>${Array.from(
+      { length: 15 },
+      (_, i) =>
+        `<item><title>Steam Frame news ${i}</title><link>https://gol.test/a${i}</link><pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate></item>`,
+    ).join('')}</channel></rss>`;
+
+    it('gives free users none-scored items capped at 10, with no digest, push, feeds or Notion', async () => {
+      const fetch = routedFetch({
+        'gol.test': () => res(many),
+        'other.test': () => res('', 500),
+        'api.deepseek.com': () => res(reply(0)),
+        'api.telegram.org': () => res('{"ok":true}'),
+      });
+      const push: PushSender = async () => {
+        throw new Error('free users get no push');
+      };
+      const m = memoryStore([
+        user('free', {
+          plan: 'free',
+          topN: 30,
+          telegramChatId: '42',
+          pushSubscriptions: [subA],
+          notion: { token: 't', dbId: 'd' },
+          customFeeds: [{ id: 'custom:x', url: 'https://x.example/rss', title: 'X' }],
+        }),
+        user('pro', { plan: 'pro', topN: 30 }),
+      ]);
+      const out = await runForUsers(config, m.store, {
+        env,
+        fetch,
+        now: NOW,
+        push,
+        resolve: async () => ['93.184.216.34'],
+      });
+      expect(out.users[0]).toMatchObject({
+        userId: 'free',
+        queued: 10,
+        digestSent: false,
+        pushSent: 0,
+      });
+      expect(out.users[0]?.notion).toBeUndefined();
+      expect(m.queue.get('free')?.every((i) => !i.ai)).toBe(true);
+      expect(fetch.calls.some((u) => u.includes('x.example'))).toBe(false);
+      // Pro is unchanged: scored by the model.
+      expect(m.queue.get('pro')?.every((i) => i.ai)).toBe(true);
+      expect(out.users[1]?.digestSent).toBe(false);
+    });
   });
 
   describe('custom feeds', () => {

@@ -29,7 +29,7 @@ interface Toast {
 
 type Load = 'loading' | 'ready' | 'more' | 'error';
 
-export function Queue() {
+export function Queue({ isPro }: { isPro: boolean }) {
   const [status, setStatus] = useState<QueueStatus>(takeQueueTab);
   const [state, dispatch] = useReducer(queueReducer, initialQueue);
   const [load, setLoad] = useState<Load>('loading');
@@ -339,6 +339,7 @@ export function Queue() {
                   key={item.id}
                   item={item}
                   now={now}
+                  locked={!isPro}
                   hint={hint && status === 'new' && i === 0}
                   onDismissHint={dismissHint}
                   selected={item.id === selected}

@@ -143,13 +143,51 @@ describe.skipIf(!dbAvailable)('summarize (POST /api/summarize)', () => {
     expect((await summarize(u, 'https://article.example/a')).status).toBe(503);
   });
 
-  it('requires sign-in (401) and Pro (402)', async () => {
-    expect((await summarize(undefined, 'https://article.example/a')).status).toBe(401);
-    const u = await signUp(ctx.app, 'a@example.com');
-    await ctx.db
+  const expire = (id: string) =>
+    ctx.db
       .update(schema.subscription)
       .set({ trialEndsAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.subscription.userId, id));
+
+  it('requires sign-in (401) but not Pro', async () => {
+    expect((await summarize(undefined, 'https://article.example/a')).status).toBe(401);
+    const u = await signUp(ctx.app, 'a@example.com');
+    await expire(u.id);
+    expect((await summarize(u, 'https://article.example/a')).status).toBe(200);
+  });
+
+  it('gives free accounts 3 new summaries a day, with the count left; cached ones stay free', async () => {
+    const u = await signUp(ctx.app, 'a@example.com');
+    await expire(u.id);
+    const left: unknown[] = [];
+    for (const n of [1, 2, 3]) {
+      const body = (await (await summarize(u, `https://article.example/${n}`)).json()) as Json;
+      expect(body.cached).toBe(false);
+      left.push(body.remaining);
+    }
+    expect(left).toEqual([2, 1, 0]);
+
+    const over = await summarize(u, 'https://article.example/4');
+    expect(over.status).toBe(429);
+    expect(((await over.json()) as Json).error).toMatch(/3 new summaries a day \(Pro gets 100\)/);
+    expect(aiCalls).toBe(3);
+
+    // a page already summarized stays free and unlimited, and reports 0 left
+    const again = (await (await summarize(u, 'https://article.example/1')).json()) as Json;
+    expect(again).toMatchObject({ cached: true, remaining: 0, limit: 3 });
+    // another user's cached page is free for this one too
+    const b = await signUp(ctx.app, 'b@example.com');
+    const bBody = (await (await summarize(b, 'https://article.example/2')).json()) as Json;
+    expect(bBody).toMatchObject({ cached: true });
+    expect(aiCalls).toBe(3);
+
+    // Pro has no counter and the 100 cap
+    await ctx.db
+      .update(schema.subscription)
+      .set({ status: 'active' })
       .where(eq(schema.subscription.userId, u.id));
-    expect((await summarize(u, 'https://article.example/a')).status).toBe(402);
+    const pro = (await (await summarize(u, 'https://article.example/5')).json()) as Json;
+    expect(pro.cached).toBe(false);
+    expect(pro).not.toHaveProperty('remaining');
   });
 });

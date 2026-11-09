@@ -44,6 +44,22 @@ describe.skipIf(!dbAvailable)('api', () => {
     await ctx.reset();
   });
 
+  const expireTrial = (userId: string) =>
+    ctx.db
+      .update(schema.subscription)
+      .set({ trialEndsAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.subscription.userId, userId));
+  const proOf = async (app: TestApp, u: Awaited<ReturnType<typeof signUp>>) =>
+    (((await (await call(app, '/api/me', { user: u })).json()) as Json).subscription as Json)
+      .isPro as boolean;
+  // A route that stays Pro-only (requirePro runs before the body is read).
+  const feedsCheck = (app: TestApp, u: Awaited<ReturnType<typeof signUp>>) =>
+    call(app, '/api/me/feeds/check', {
+      method: 'POST',
+      user: u,
+      json: { url: 'https://a.example/rss' },
+    });
+
   const seedQueue = async (userId: string, n = 1, prefix = 'a') => {
     const rows = Array.from({ length: n }, (_, i) => ({
       userId,
@@ -574,47 +590,71 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect((await add(u, { url: 'https://example.com/one-more', title: 'x' })).status).toBe(201);
     });
 
-    it('requires sign-in (401) and Pro (402)', async () => {
+    it('requires sign-in (401) but not Pro', async () => {
       expect((await add(undefined, { url: 'https://example.com/a', title: 't' })).status).toBe(401);
       const u = await signUp(ctx.app, 'a@example.com');
+      await expireTrial(u.id);
+      expect((await add(u, { url: 'https://example.com/a', title: 't' })).status).toBe(201);
+    });
+
+    it('caps free accounts at 10 adds a day and never calls the model', async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test');
+      const u = await signUp(ctx.app, 'a@example.com');
+      await expireTrial(u.id);
+      await ctx.db.insert(schema.queueItem).values(
+        Array.from({ length: 10 }, (_, i) => ({
+          userId: u.id,
+          url: `https://example.com/free${i}`,
+          title: `free ${i}`,
+          source: 'Added by you',
+          status: 'picked' as const,
+          addedByUser: true,
+        })),
+      );
+      const res = await add(u, { url: 'https://example.com/one-more', title: 'x' });
+      expect(res.status).toBe(429);
+      expect(((await res.json()) as Json).error).toMatch(/10 items a day.*Pro raises that to 30/);
+      // duplicates are still fine, Pro keeps its higher cap
+      expect((await add(u, { url: 'https://example.com/free0', title: 'x' })).status).toBe(200);
       await ctx.db
         .update(schema.subscription)
-        .set({ trialEndsAt: new Date(Date.now() - 1000) })
+        .set({ status: 'active' })
         .where(eq(schema.subscription.userId, u.id));
-      expect((await add(u, { url: 'https://example.com/a', title: 't' })).status).toBe(402);
+      expect((await add(u, { url: 'https://example.com/one-more', title: 'x' })).status).toBe(201);
     });
   });
 
   describe('Pro gate', () => {
-    it('returns 402 once the trial has expired and 200 again when active', async () => {
+    it('keeps the queue open to free accounts, but Pro routes return 402 once the trial has expired', async () => {
       const u = await signUp(ctx.app, 'a@example.com');
-      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(200);
+      expect(await proOf(ctx.app, u)).toBe(true);
 
-      await ctx.db
-        .update(schema.subscription)
-        .set({ trialEndsAt: new Date(Date.now() - 1000) })
-        .where(eq(schema.subscription.userId, u.id));
-      const gated = await call(ctx.app, '/api/queue', { user: u });
+      await expireTrial(u.id);
+      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(200);
+      const gated = await feedsCheck(ctx.app, u);
       expect(gated.status).toBe(402);
       expect(((await gated.json()) as Json).error).toMatch(/pro/i);
-      const me = (await (await call(ctx.app, '/api/me', { user: u })).json()) as Json;
-      expect(me.subscription.isPro).toBe(false);
+      expect(await proOf(ctx.app, u)).toBe(false);
 
       await ctx.db
         .update(schema.subscription)
         .set({ status: 'active' })
         .where(eq(schema.subscription.userId, u.id));
-      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(200);
+      expect(await proOf(ctx.app, u)).toBe(true);
     });
 
-    it('gates canceled and past_due users', async () => {
+    it('requires sign-in for the queue', async () => {
+      expect((await call(ctx.app, '/api/queue')).status).toBe(401);
+    });
+
+    it('treats canceled, past_due and none as free', async () => {
       const u = await signUp(ctx.app, 'a@example.com');
       for (const status of ['canceled', 'past_due', 'none'] as const) {
         await ctx.db
           .update(schema.subscription)
           .set({ status })
           .where(eq(schema.subscription.userId, u.id));
-        expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(402);
+        expect(await proOf(ctx.app, u)).toBe(false);
       }
     });
 
@@ -624,10 +664,10 @@ describe.skipIf(!dbAvailable)('api', () => {
         .update(schema.subscription)
         .set({ status: 'none', plan: 'free', trialEndsAt: null })
         .where(eq(schema.subscription.userId, u.id));
-      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(402);
+      expect(await proOf(ctx.app, u)).toBe(false);
       const up = await call(ctx.app, '/api/dev/upgrade', { method: 'POST', user: u });
       expect(up.status).toBe(200);
-      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(200);
+      expect(await proOf(ctx.app, u)).toBe(true);
     });
 
     it('does not mount /api/dev/upgrade in production', async () => {
@@ -655,11 +695,11 @@ describe.skipIf(!dbAvailable)('api', () => {
           .update(schema.subscription)
           .set({ status: 'none', plan: 'free', trialEndsAt: null })
           .where(eq(schema.subscription.userId, u.id));
-        expect((await call(prod.app, '/api/queue', { user: u })).status).toBe(402);
+        expect(await proOf(prod.app, u)).toBe(false);
         const res = await call(prod.app, '/api/billing/checkout', { method: 'POST', user: u });
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ url: null, upgraded: true });
-        expect((await call(prod.app, '/api/queue', { user: u })).status).toBe(200);
+        expect(await proOf(prod.app, u)).toBe(true);
       } finally {
         await prod.close();
       }
@@ -684,13 +724,13 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect(await subOf(u.id)).toMatchObject({ plan: 'pro', status: 'canceled' });
       const me = (await (await call(ctx.app, '/api/me', { user: u })).json()) as Json;
       expect(me.subscription).toMatchObject({ status: 'canceled', isPro: true });
-      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(200);
+      expect(await proOf(ctx.app, u)).toBe(true);
 
       await ctx.db
         .update(schema.subscription)
         .set({ currentPeriodEnd: new Date(Date.now() - 1000) })
         .where(eq(schema.subscription.userId, u.id));
-      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(402);
+      expect(await proOf(ctx.app, u)).toBe(false);
       const me2 = (await (await call(ctx.app, '/api/me', { user: u })).json()) as Json;
       expect(me2.subscription.isPro).toBe(false);
     });
@@ -784,7 +824,7 @@ describe.skipIf(!dbAvailable)('api', () => {
           .where(eq(schema.subscription.userId, u.id));
         expect(sub).toMatchObject({ plan: 'free', status: 'canceled' });
       }
-      expect((await call(ctx.app, '/api/queue', { user: u })).status).toBe(402);
+      expect(await proOf(ctx.app, u)).toBe(false);
     });
 
     it('400s without a user id, 404s for an unknown user, ignores other events', async () => {

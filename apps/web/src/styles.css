@@ -890,6 +890,14 @@ kbd {
   color: var(--text-2);
   text-wrap: pretty;
 }
+.q-locked {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  max-width: 62ch;
+  font-size: 14px;
+  color: var(--text-3);
+  text-wrap: pretty;
+}
 .link-quiet.q-more {
   display: none;
   margin-top: 8px;

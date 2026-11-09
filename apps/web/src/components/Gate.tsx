@@ -61,33 +61,20 @@ export function Gate({ me, feature }: Props) {
     );
   }
 
-  if (me.status === 'anon') {
-    return (
-      <div className="state">
-        <h2 className="state-title">Ideas is a Pro feature</h2>
-        <p>
-          It takes the best of each radar run, adds a hook and an angle for each item, and learns
-          from what you pick and skip. The first 7 days are free.
-        </p>
-        <div className="auth-actions">
-          <Link to="signin" signup className="btn btn-solid">
-            Start 7-day trial
-          </Link>
-          <Link to="signin" className="link">
-            Sign in
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="state">
-      <h2 className="state-title">The queue needs Pro</h2>
-      <p>Your account is on the Free plan, so Ideas is switched off.</p>
+      <h2 className="state-title">Ideas needs an account</h2>
+      <p>
+        Sign in to get a queue of stories matched to your topics, save any link, and keep what you
+        pick. Pro adds a hook, an angle and a title draft for each one, and the first 7 days are
+        free.
+      </p>
       <div className="auth-actions">
-        <Link to="pricing" className="btn btn-solid">
-          See Pro
+        <Link to="signin" signup className="btn btn-solid">
+          Create an account
+        </Link>
+        <Link to="signin" className="link">
+          Sign in
         </Link>
       </div>
     </div>

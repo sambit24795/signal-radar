@@ -253,8 +253,8 @@ export function App() {
             />
           )}
           {route.name === 'queue' &&
-            (me.status === 'ready' && me.me.subscription.isPro ? (
-              <Queue />
+            (me.status === 'ready' ? (
+              <Queue isPro={me.me.subscription.isPro} />
             ) : (
               <Gate me={me} feature="queue" />
             ))}
@@ -276,7 +276,7 @@ export function App() {
           !(me.status === 'ready' && me.me.subscription.isPro) && (
             <footer className="footer">
               <p>
-                Pro adds AI-scored hooks and a personal queue.{' '}
+                Pro adds AI-written hooks, angles and title drafts.{' '}
                 <Link to="pricing" className="link">
                   See Pricing
                 </Link>

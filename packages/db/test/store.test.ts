@@ -43,22 +43,32 @@ describe.skipIf(!available)('createPgStore + runForUsers', () => {
   const future = new Date(NOW.getTime() + 86_400_000);
   const past = new Date(NOW.getTime() - 86_400_000);
 
-  it('lists only Pro users (active, unexpired trial, or canceled within the paid period)', async () => {
+  it('lists every user with a config, marking Pro (active, unexpired trial, canceled within the paid period) or free', async () => {
     await addUser('active', { status: 'active' });
     await addUser('trial', { status: 'trialing', trialEndsAt: future });
     await addUser('expired', { status: 'trialing', trialEndsAt: past });
     await addUser('none', { status: 'none' });
     await addUser('canceled', { status: 'canceled', currentPeriodEnd: future });
     await addUser('lapsed', { status: 'canceled', currentPeriodEnd: past });
-    const users = await createPgStore(db).listProUsers(NOW);
-    expect(users.map((u) => u.id).sort()).toEqual(['active', 'canceled', 'trial']);
+    const users = await createPgStore(db).listQueueUsers(NOW);
+    expect(users.map((u) => u.id).sort()).toEqual([
+      'active',
+      'canceled',
+      'expired',
+      'lapsed',
+      'none',
+      'trial',
+    ]);
+    const plan = (id: string) => users.find((u) => u.id === id)?.plan;
+    expect(['active', 'canceled', 'trial'].map(plan)).toEqual(['pro', 'pro', 'pro']);
+    expect(['expired', 'lapsed', 'none'].map(plan)).toEqual(['free', 'free', 'free']);
   });
 
   it('lists a user custom feeds', async () => {
     await addUser('ann', { status: 'active' });
     const feeds = [{ id: 'custom:abc', url: 'https://a.example/rss', title: 'A' }];
     await db.update(schema.userConfig).set({ customFeeds: feeds });
-    const [u] = await createPgStore(db).listProUsers(NOW);
+    const [u] = await createPgStore(db).listQueueUsers(NOW);
     expect(u?.customFeeds).toEqual(feeds);
   });
 
@@ -116,7 +126,7 @@ describe.skipIf(!available)('createPgStore + runForUsers', () => {
       { userId: 'ann', endpoint: 'https://p.test/2', keys },
     ]);
     const store = createPgStore(db);
-    const users = await store.listProUsers(NOW);
+    const users = await store.listQueueUsers(NOW);
     const subs = (id: string) => users.find((u) => u.id === id)?.pushSubscriptions;
     expect(subs('ann')?.map((s) => s.endpoint)).toEqual(['https://p.test/1', 'https://p.test/2']);
     expect(subs('bob')).toEqual([]);

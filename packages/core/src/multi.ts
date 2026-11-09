@@ -20,7 +20,13 @@ import { collectItems, type SourceResult } from './pipeline.js';
 import { prefilter } from './prefilter.js';
 import { rank } from './rank.js';
 import type { Item, Niche, RadarConfig, RawItem, ScoredItem } from './schema.js';
-import { createProvider, scoreItems, type Enriched, type Feedback } from './score/index.js';
+import {
+  createProvider,
+  noneProvider,
+  scoreItems,
+  type Enriched,
+  type Feedback,
+} from './score/index.js';
 import { parseFeed } from './sources/rss.js';
 
 /** A feed URL a Pro user added themselves. */
@@ -30,10 +36,15 @@ export interface CustomFeed {
   title: string;
 }
 
-/** A Pro user the run works for. */
+/** Free accounts: no AI, at most this many new items per run, no digest or integrations. */
+export const FREE_TOP_N = 10;
+
+/** A signed-in user the run works for: Pro, or a free account with topics. */
 export interface RadarUser {
   id: string;
   email?: string;
+  /** Missing means `pro`. Free users get the `none` provider and no outbound channels. */
+  plan?: 'pro' | 'free';
   niches: Niche[];
   /** Enabled source ids; empty means every configured source. */
   sources: string[];
@@ -51,8 +62,8 @@ export interface RadarUser {
  * `@radar/db` provides the Postgres implementation, tests use an in-memory one.
  */
 export interface RadarStore {
-  /** Users with an active subscription or an unexpired trial. */
-  listProUsers(now: Date): Promise<RadarUser[]>;
+  /** Pro users (active or unexpired trial) and signed-in free users. */
+  listQueueUsers(now: Date): Promise<RadarUser[]>;
   /** Upsert the shared public feed. Returns the number of rows written. */
   upsertFeed(items: ScoredItem[], now: Date): Promise<number>;
   /** Urls this user has already been shown. */
@@ -164,7 +175,20 @@ export async function runForUsers(
   const provider = createProvider(config, env, warn, opts.fetch);
   const fetchFn = opts.fetch ?? createFetch(config.fetchTimeoutMs);
   const pushSender = opts.push === undefined ? createPushSender(env) : opts.push;
-  const users = (await store.listProUsers(now)).filter((u) => u.niches.length > 0);
+  const users = (await store.listQueueUsers(now))
+    .filter((u) => u.niches.length > 0)
+    .map((u) =>
+      u.plan === 'free'
+        ? {
+            ...u,
+            topN: Math.min(u.topN, FREE_TOP_N),
+            customFeeds: [],
+            telegramChatId: null,
+            pushSubscriptions: [],
+            notion: null,
+          }
+        : u,
+    );
   // Custom feeds: each distinct URL fetched once, never written to the public feed.
   const customRaw = await fetchCustomFeeds(users, opts.fetch, opts.resolve, warn);
   const sharedIds = new Set(collected.items.map((i) => i.id));
@@ -209,7 +233,7 @@ export async function runForUsers(
       res.candidates = ranked.length;
 
       const feedback = await store.feedback(user.id, opts.feedbackLimit ?? 10);
-      const scored = await scoreItems(provider, ranked, {
+      const scored = await scoreItems(user.plan === 'free' ? noneProvider : provider, ranked, {
         niches: user.niches,
         feedback,
         limit: user.topN,

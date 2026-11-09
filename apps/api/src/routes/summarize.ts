@@ -14,9 +14,10 @@ import { schema } from '@radar/db';
 import radarConfig from '../../../../radar.config.js';
 import type { AppVars, RouteDeps } from '../app.js';
 import { badRequest, parseBody } from '../http.js';
-import { requireAuth, requirePro } from '../middleware.js';
+import { requireAuth, userIsPro } from '../middleware.js';
 
 export const MAX_SUMMARIES_PER_DAY = 100;
+export const MAX_FREE_SUMMARIES_PER_DAY = 3;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 const AI_TIMEOUT_MS = 25_000;
 
@@ -26,7 +27,7 @@ export function summarizeRoutes(deps: RouteDeps) {
   const { db } = deps;
   const t = schema.pageSummary;
   const r = new Hono<AppVars>();
-  r.use('*', requireAuth(deps), requirePro(deps));
+  r.use('*', requireAuth(deps));
 
   r.post('/', async (c) => {
     const userId = c.get('user').id;
@@ -38,11 +39,21 @@ export function summarizeRoutes(deps: RouteDeps) {
       return badRequest(e instanceof Error ? e.message : 'invalid url');
     }
 
+    const pro = await userIsPro(db, userId);
+    const cap = pro ? MAX_SUMMARIES_PER_DAY : MAX_FREE_SUMMARIES_PER_DAY;
+    const [{ n } = { n: 0 }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(t)
+      .where(and(eq(t.requestedBy, userId), gt(t.createdAt, new Date(Date.now() - WINDOW_MS))));
+
+    // Free accounts see how many new summaries are left today; Pro has no counter in the UI.
     const respond = (
       row: { status: 'ok' | 'unreadable'; tldr: string | null; points: string[] | null },
       cached: boolean,
+      used = n,
     ) =>
       c.json({
+        ...(pro ? {} : { remaining: Math.max(0, cap - used), limit: cap }),
         url,
         status: row.status,
         ...(row.status === 'ok' && row.tldr ? { tldr: row.tldr, points: row.points ?? [] } : {}),
@@ -52,14 +63,13 @@ export function summarizeRoutes(deps: RouteDeps) {
     const [hit] = await db.select().from(t).where(eq(t.url, url));
     if (hit) return respond(hit, true);
 
-    const [{ n } = { n: 0 }] = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(t)
-      .where(and(eq(t.requestedBy, userId), gt(t.createdAt, new Date(Date.now() - WINDOW_MS))));
-    if (n >= MAX_SUMMARIES_PER_DAY) {
+    if (n >= cap) {
       return c.json(
         {
-          error: `You can summarize up to ${MAX_SUMMARIES_PER_DAY} new pages a day. Try again tomorrow.`,
+          error: pro
+            ? `You can summarize up to ${cap} new pages a day. Try again tomorrow.`
+            : `Free accounts get ${cap} new summaries a day (Pro gets ${MAX_SUMMARIES_PER_DAY}). Summaries you have already seen stay free.`,
+          ...(pro ? {} : { remaining: 0, limit: cap }),
         },
         429,
       );
@@ -107,7 +117,7 @@ export function summarizeRoutes(deps: RouteDeps) {
       .values({ ...values, model, requestedBy: userId })
       .onConflictDoNothing({ target: t.url })
       .returning();
-    if (row) return respond(row, false);
+    if (row) return respond(row, false, n + 1);
     // Lost a race with another request for the same URL: serve what it stored.
     const [stored] = await db.select().from(t).where(eq(t.url, url));
     return respond(stored ?? values, true);

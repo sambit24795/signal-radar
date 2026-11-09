@@ -49,17 +49,25 @@ export function dispatchSummary(url: string, action: SummaryAction): void {
   summaries.set((m) => new Map(m).set(url, summaryReduce(m.get(url) ?? IDLE, action)));
 }
 
+/** New summaries a free account has left today; null until the server has said (Pro never sets it). */
+export const freeLeft = createStore<{ remaining: number; limit: number } | null>(null);
+
 interface SummarizeReply {
+  remaining?: number;
+  limit?: number;
   status: 'ok' | 'unreadable';
   tldr?: string;
   points?: string[];
 }
 
-/** `POST /api/summarize`: reads the page and updates the stored state. 401 and 402 return 'auth' for the caller. */
+/** `POST /api/summarize`: reads the page and updates the stored state. 401 returns 'auth' for the caller. */
 export async function requestSummary(url: string): Promise<'done' | 'auth'> {
   dispatchSummary(url, { type: 'start' });
   try {
     const res = await api<SummarizeReply>('/api/summarize', { method: 'POST', json: { url } });
+    if (typeof res.remaining === 'number' && typeof res.limit === 'number') {
+      freeLeft.set({ remaining: res.remaining, limit: res.limit });
+    }
     if (res.status === 'ok' && res.tldr) {
       dispatchSummary(url, { type: 'ok', tldr: res.tldr, points: res.points ?? [] });
     } else {
@@ -67,7 +75,7 @@ export async function requestSummary(url: string): Promise<'done' | 'auth'> {
     }
     return 'done';
   } catch (e) {
-    if (e instanceof ApiError && (e.status === 401 || e.status === 402)) {
+    if (e instanceof ApiError && e.status === 401) {
       dispatchSummary(url, { type: 'pitch' });
       return 'auth';
     }

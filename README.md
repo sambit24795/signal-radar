@@ -25,6 +25,10 @@ you what is moving. It has two tiers.
 The scoring prompt includes the user's most recent picks and skips. Picked stories are the positive examples, skipped
 ones the negative.
 
+Custom feeds are user-supplied URLs, so the server fetches them defensively: http(s) only, no private, loopback,
+link-local or metadata addresses, and the address check runs inside the socket's own DNS lookup, so a domain can't pass
+the check and then rebind to an internal IP. Redirects are re-checked (max 3), with an 8 s timeout and a 2 MB cap.
+
 ## Stack
 
 TypeScript throughout, on Node 24 with pnpm workspaces.
@@ -41,6 +45,7 @@ TypeScript throughout, on Node 24 with pnpm workspaces.
 You need Node 24 (see `.nvmrc`), pnpm and Docker.
 
 ```sh
+git clone https://github.com/sambit24795/signal-radar.git && cd signal-radar
 pnpm install
 cp .env.example .env     # set BETTER_AUTH_SECRET at least
 pnpm db:up               # Postgres on :5432, also creates radar_test

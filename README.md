@@ -72,6 +72,10 @@ pnpm test
 pnpm web:build
 ```
 
+`pnpm web:build` also pre-renders `/` and `/pricing` to static HTML (`apps/web/build/prerender.ts`), so crawlers and link
+previews see real content. `apps/web/scripts/og.mjs` regenerates `public/og.png` from `scripts/og.html` (needs Playwright,
+which is not a dependency).
+
 ## Configuration
 
 Sources, default niches, the scoring provider and `topN` are in `radar.config.ts`. Everything else is environment
@@ -95,6 +99,7 @@ variables, read from `.env` by the API and the CLI.
 | `VAPID_SUBJECT`               | `mailto:` contact sent to push services.                                                                 |
 | `TELEGRAM_BOT_USERNAME`       | Bot username without the `@`. Needed for the Connect Telegram link; unset hides the button.              |
 | `TELEGRAM_WEBHOOK_SECRET`     | Secret the bot webhook must present. Unset: the webhook returns 404.                                     |
+| `VITE_SITE_URL`               | Web origin for canonical and share URLs, sitemap and robots at build. Default `localhost:5173`.          |
 
 Also read, but not in `.env.example`: `ANTHROPIC_API_KEY` (when `provider: 'anthropic'`), `GITHUB_TOKEN` (higher GitHub
 rate limit), `PAYMENTS_PROVIDER` (`stub` or `lemonsqueezy`, default `stub`) and `NOTION_DB_ID` (`--local` mode).

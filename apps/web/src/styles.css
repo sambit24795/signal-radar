@@ -1318,6 +1318,111 @@ kbd {
   letter-spacing: -0.02em;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* six steps, each a short paragraph beside a real screenshot */
+.lsec.lsec-beats {
+  grid-template-columns: minmax(0, 1fr);
+  padding-bottom: 8px;
+}
+.beats {
+  margin-top: 16px;
+}
+.beat {
+  display: grid;
+  gap: 20px;
+  padding: 32px 0 40px;
+  border-top: 1px solid var(--border);
+}
+.beat-no {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: var(--text-2);
+  font: 400 13px/1 var(--mono);
+}
+.tag {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: 400 12px/1 var(--mono);
+  color: var(--text-2);
+}
+.beat-title {
+  font: 400 26px/1.15 var(--serif);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.beat-body {
+  margin-top: 12px;
+  max-width: 28rem;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+.beat-fig {
+  margin: 0;
+}
+.beat-fig img {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.faq {
+  border-top: 1px solid var(--border);
+}
+.faq-item {
+  border-bottom: 1px solid var(--border);
+}
+.faq-item summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  cursor: pointer;
+  list-style: none;
+  font: 400 18px/1.28 var(--serif);
+}
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item summary::after {
+  content: '+';
+  flex: none;
+  color: var(--text-2);
+  font: 400 15px/1.7 var(--mono);
+}
+.faq-item[open] summary::after {
+  content: '\2013';
+}
+.faq-item summary:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.faq-item p {
+  max-width: 34rem;
+  padding-bottom: 20px;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+
+.landing-foot {
+  padding-top: 20px;
+}
+
 /* ---------- onboarding ---------- */
 
 .welcome {
@@ -1491,6 +1596,17 @@ kbd {
   }
   .plans-brief .plan {
     padding-top: 0;
+  }
+  .beat-title {
+    font-size: 30px;
+  }
+}
+
+@media (min-width: 1000px) {
+  .beat {
+    grid-template-columns: minmax(0, 24rem) 420px;
+    gap: 64px;
+    padding: 48px 0 56px;
   }
 }
 

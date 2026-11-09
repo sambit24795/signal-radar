@@ -2,22 +2,8 @@ import { useState } from 'react';
 import { PAYMENTS_TEST_MODE, startCheckout } from '../lib/billing';
 import { refreshMe, type MeState } from '../lib/me';
 import { navigate } from '../lib/route';
+import { FREE_FEATURES, PRICE, PRO_FEATURES } from '../lib/tiers';
 import { Link } from './Link';
-
-const FREE = [
-  'The ranked Read view across every source, no account needed',
-  'With an account: an Ideas queue of up to 10 new stories a run, ranked by your topics',
-  'Save any link to Ideas, up to 10 a day',
-  '3 new page summaries a day; ones already read are free',
-];
-
-const PRO = [
-  'Everything in Free, with higher limits: 30 saved links and 100 summaries a day',
-  'A hook, an angle and a title draft written for each queued story',
-  'An Ideas queue that learns from what you pick and skip',
-  'Your own RSS feeds',
-  'A Telegram digest, web push and Notion sync',
-];
 
 export function Pricing({ me }: { me: MeState }) {
   const [busy, setBusy] = useState(false);
@@ -57,10 +43,10 @@ export function Pricing({ me }: { me: MeState }) {
             Free
           </h3>
           <p className="plan-price">
-            <span className="price">$0</span>
+            <span className="price">{PRICE.free}</span>
           </p>
           <ul className="plan-list">
-            {FREE.map((f) => (
+            {FREE_FEATURES.map((f) => (
               <li key={f}>{f}</li>
             ))}
           </ul>
@@ -80,11 +66,11 @@ export function Pricing({ me }: { me: MeState }) {
             Pro
           </h3>
           <p className="plan-price">
-            <span className="price">$5</span>
-            <span className="meta"> per month, 7 days free</span>
+            <span className="price">{PRICE.pro}</span>
+            <span className="meta">{PRICE.proPeriod}</span>
           </p>
           <ul className="plan-list">
-            {PRO.map((f) => (
+            {PRO_FEATURES.map((f) => (
               <li key={f}>{f}</li>
             ))}
           </ul>
@@ -121,7 +107,7 @@ export function Pricing({ me }: { me: MeState }) {
       </div>
 
       <p className="meta pricing-note">
-        Cancel any time; you keep Pro until the period you paid for ends.
+        {PRICE.cancelNote}
         {PAYMENTS_TEST_MODE && ' Payments are in test mode, so upgrading does not charge you.'}
       </p>
     </section>

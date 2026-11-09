@@ -19,14 +19,20 @@ const NAV: { to: RouteName; label: string }[] = [
 ];
 
 export function Masthead({ route, me, dark, onToggleTheme, onSignOut }: Props) {
+  const brand = (
+    <Link to="read" aria-label="Signal Radar, home">
+      <RadarMark />
+      <span>Signal Radar</span>
+    </Link>
+  );
   return (
     <header className="masthead">
-      <h1 className="wordmark">
-        <Link to="read" aria-label="Signal Radar, home">
-          <RadarMark />
-          <span>Signal Radar</span>
-        </Link>
-      </h1>
+      {/* The landing page's own headline is its h1; elsewhere the wordmark is. */}
+      {route === 'landing' ? (
+        <p className="wordmark">{brand}</p>
+      ) : (
+        <h1 className="wordmark">{brand}</h1>
+      )}
       <nav className="nav" aria-label="Main">
         {NAV.map((n) => (
           <Link

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Niche } from '@radar/core/ranking';
+import { Frame } from './components/Frame';
 import { Gate } from './components/Gate';
 import { ImportOffer } from './components/ImportOffer';
 import { Landing } from './components/Landing';
 import { Link } from './components/Link';
-import { Masthead } from './components/Masthead';
 import { Pricing } from './components/Pricing';
 import { Queue } from './components/Queue';
 import { ReadView } from './components/ReadView';
@@ -26,6 +26,7 @@ import {
 import { hasOpenedRadar, landingRedirect, markRadarOpened } from './lib/landing';
 import { justOnboarded, useOnboardingDismissed } from './lib/onboarding';
 import { importFlagKey, mergeServerConfig, shouldOfferImport } from './lib/prefsMerge';
+import { PAGE_META } from './lib/site';
 import { navigate, useRoute, type RouteName } from './lib/route';
 import type { SourceKind } from './lib/view';
 
@@ -42,12 +43,12 @@ function applyTheme(theme: Theme) {
 }
 
 const TITLES: Record<RouteName, string> = {
-  landing: 'Signal Radar: find the story before the algorithm does',
+  landing: PAGE_META['/'].title,
   welcome: 'Set up your radar · Signal Radar',
   read: 'Read · Signal Radar',
   queue: 'Ideas · Signal Radar',
   settings: 'Settings · Signal Radar',
-  pricing: 'Pricing · Signal Radar',
+  pricing: PAGE_META['/pricing'].title,
   signin: 'Sign in · Signal Radar',
 };
 
@@ -186,20 +187,15 @@ export function App() {
       : false;
 
   return (
-    <>
-      <a className="skip" href="#main">
-        Skip to the content
-      </a>
-      <div className={route.name === 'landing' ? 'page page-wide' : 'page'}>
-        <Masthead
-          route={route.name}
-          me={me}
-          dark={dark}
-          onToggleTheme={() => update({ ...stored, theme: dark ? 'light' : 'dark' })}
-          onSignOut={() => void onSignOut()}
-        />
-
-        {offer && userId && config && defaults && (
+    <Frame
+      route={route.name}
+      me={me}
+      dark={dark}
+      onToggleTheme={() => update({ ...stored, theme: dark ? 'light' : 'dark' })}
+      onSignOut={() => void onSignOut()}
+      mainRef={mainRef}
+      banner={
+        offer && userId && config && defaults ? (
           <ImportOffer
             userId={userId}
             stored={stored}
@@ -207,83 +203,87 @@ export function App() {
             defaults={defaults}
             onDone={() => setOfferDone(true)}
           />
-        )}
-
-        <main id="main" ref={mainRef} tabIndex={-1} className="main">
-          {route.name === 'landing' &&
-            (redirect === null && !needsSetup ? (
-              <Landing data={data} now={now} retry={retry} />
-            ) : (
-              <p className="meta" aria-busy="true">
-                Loading
-              </p>
-            ))}
-          {route.name === 'welcome' &&
-            (me.status === 'ready' ? (
-              config && defaults ? (
-                <Welcome
-                  config={config}
-                  defaults={defaults}
-                  isPro={me.me.subscription.isPro}
-                  localNiches={stored.niches}
-                />
-              ) : (
-                <p className="meta" aria-busy="true">
-                  Loading your settings
-                </p>
-              )
-            ) : (
-              <Gate me={me} feature="welcome" />
-            ))}
-          {route.name === 'read' && (
-            <ReadView
-              data={data}
-              retry={retry}
-              prefs={prefs}
-              now={now}
-              stale={stale}
-              install={install}
-              syncError={syncError}
-              onNiches={setNiches}
-              onToggleSource={toggleSource}
-              onSourceKinds={setSourceKinds}
-              onStartOver={clearTopics}
-              onShowAll={showEverything}
-              settling={settling}
+        ) : null
+      }
+      footer={
+        route.name !== 'pricing' &&
+        route.name !== 'landing' &&
+        route.name !== 'welcome' &&
+        !(me.status === 'ready' && me.me.subscription.isPro) ? (
+          <footer className="footer">
+            <p>
+              Pro adds AI-written hooks, angles and title drafts.{' '}
+              <Link to="pricing" className="link">
+                See Pricing
+              </Link>
+            </p>
+          </footer>
+        ) : null
+      }
+    >
+      {route.name === 'landing' &&
+        ((redirect === null || redirect === 'wait') && !needsSetup ? (
+          <Landing
+            data={data}
+            now={now}
+            retry={retry}
+            dark={stored.theme === 'system' ? null : dark}
+          />
+        ) : (
+          <p className="meta" aria-busy="true">
+            Loading
+          </p>
+        ))}
+      {route.name === 'welcome' &&
+        (me.status === 'ready' ? (
+          config && defaults ? (
+            <Welcome
+              config={config}
+              defaults={defaults}
+              isPro={me.me.subscription.isPro}
+              localNiches={stored.niches}
             />
-          )}
-          {route.name === 'queue' &&
-            (me.status === 'ready' ? (
-              <Queue isPro={me.me.subscription.isPro} />
-            ) : (
-              <Gate me={me} feature="queue" />
-            ))}
-          {route.name === 'settings' &&
-            (me.status === 'ready' ? (
-              <Settings me={me.me} defaults={defaults} />
-            ) : (
-              <Gate me={me} feature="settings" />
-            ))}
-          {route.name === 'pricing' && <Pricing me={me} />}
-          {route.name === 'signin' && (
-            <SignIn me={me} startSignup={route.signup} onSignOut={() => void onSignOut()} />
-          )}
-        </main>
-
-        {route.name !== 'pricing' &&
-          route.name !== 'landing' &&
-          route.name !== 'welcome' &&
-          !(me.status === 'ready' && me.me.subscription.isPro) && (
-            <footer className="footer">
-              <p>
-                Pro adds AI-written hooks, angles and title drafts.{' '}
-                <Link to="pricing" className="link">
-                  See Pricing
-                </Link>
-              </p>
-            </footer>
-          )}
-      </div>
-    </>
+          ) : (
+            <p className="meta" aria-busy="true">
+              Loading your settings
+            </p>
+          )
+        ) : (
+          <Gate me={me} feature="welcome" />
+        ))}
+      {route.name === 'read' && (
+        <ReadView
+          data={data}
+          retry={retry}
+          prefs={prefs}
+          now={now}
+          stale={stale}
+          install={install}
+          syncError={syncError}
+          onNiches={setNiches}
+          onToggleSource={toggleSource}
+          onSourceKinds={setSourceKinds}
+          onStartOver={clearTopics}
+          onShowAll={showEverything}
+          settling={settling}
+        />
+      )}
+      {route.name === 'queue' &&
+        (me.status === 'ready' ? (
+          <Queue isPro={me.me.subscription.isPro} />
+        ) : (
+          <Gate me={me} feature="queue" />
+        ))}
+      {route.name === 'settings' &&
+        (me.status === 'ready' ? (
+          <Settings me={me.me} defaults={defaults} />
+        ) : (
+          <Gate me={me} feature="settings" />
+        ))}
+      {route.name === 'pricing' && <Pricing me={me} />}
+      {route.name === 'signin' && (
+        <SignIn me={me} startSignup={route.signup} onSignOut={() => void onSignOut()} />
+      )}
+    </Frame>
   );
 }

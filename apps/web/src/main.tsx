@@ -11,6 +11,8 @@ import { App } from './App';
 
 registerSW({ immediate: true });
 
+// `/` and `/pricing` arrive pre-rendered inside #root. The first client render draws the same page,
+// so createRoot swaps it in place; there is nothing to hydrate against the live feed or session.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

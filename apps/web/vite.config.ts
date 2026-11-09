@@ -1,14 +1,23 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { normalizeSiteUrl, prerenderPlugin, siteUrlPlugin } from './build/prerender';
+
+const here = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig(({ mode }) => {
   // API_PORT lives in the repo-root .env, shared with `pnpm api:dev`.
   const env = loadEnv(mode, '../..', '');
   const apiPort = env.API_PORT || '8787';
+  const siteUrl = normalizeSiteUrl(env.VITE_SITE_URL);
   return {
+    // VITE_* variables live in the repo-root .env too.
+    envDir: '../..',
     plugins: [
       react(),
+      siteUrlPlugin(siteUrl),
+      prerenderPlugin(siteUrl, here),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icons/mark.svg', 'icons/apple-touch-icon.png'],

@@ -3,8 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Signal Radar</title>
-    <meta name="description" content="A ranked radar of what is moving in the niches you follow." />
+    <title>Signal Radar: find the story before the algorithm does</title>
+    <meta
+      name="description"
+      content="A ranked radar of what is moving in the niches you follow. Search it, summarize pages without opening them, save ideas, and on Pro get a hook, angle and title for each."
+    />
+    <link rel="canonical" href="%SITE_URL%/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Signal Radar" />
+    <meta property="og:title" content="Signal Radar: find the story before the algorithm does" />
+    <meta
+      property="og:description"
+      content="A ranked radar of what is moving in the niches you follow. Search it, summarize pages without opening them, save ideas, and on Pro get a hook, angle and title for each."
+    />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:image" content="%SITE_URL%/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Signal Radar: a ranked list of stories next to the headline Find the story before the algorithm does."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Signal Radar: find the story before the algorithm does" />
+    <meta
+      name="twitter:description"
+      content="A ranked radar of what is moving in the niches you follow. Search it, summarize pages without opening them, save ideas, and on Pro get a hook, angle and title for each."
+    />
+    <meta name="twitter:image" content="%SITE_URL%/og.png" />
     <meta name="theme-color" content="#f7f7f4" />
     <link rel="icon" href="/icons/mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
@@ -18,6 +44,19 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // The built page ships with the landing or pricing markup inside #root. Drop it where it does not
+      // belong (the SPA fallback serves this file for every route, and repeat visitors skip the landing page).
+      (function () {
+        var r = document.getElementById('root');
+        var p = location.pathname.replace(/\/+$/, '') || '/';
+        var returning = false;
+        try {
+          returning = p === '/' && localStorage.getItem('signal-radar:opened') !== null;
+        } catch (e) {}
+        if (r.dataset.prerender !== p || returning) r.textContent = '';
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

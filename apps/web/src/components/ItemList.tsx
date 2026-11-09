@@ -34,10 +34,10 @@ export function ItemList({ items, niches, now }: Props) {
   );
 }
 
-export function Skeleton() {
+export function Skeleton({ count = 7 }: { count?: number }) {
   return (
     <ol className="items" aria-hidden="true">
-      {Array.from({ length: 7 }, (_, i) => (
+      {Array.from({ length: count }, (_, i) => (
         <li key={i} className="item skeleton">
           <span className="rank">{i + 1}</span>
           <div className="item-body">

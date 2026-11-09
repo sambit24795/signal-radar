@@ -15,6 +15,13 @@
       "when": 1794232522617,
       "tag": "0001_orange_infant_terrible",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794232870988,
+      "tag": "0002_illegal_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

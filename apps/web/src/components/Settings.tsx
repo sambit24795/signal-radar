@@ -2,12 +2,14 @@ import { useState, type FormEvent } from 'react';
 import type { Niche } from '@radar/core/ranking';
 import { ApiError } from '../lib/api';
 import { cancelPlan } from '../lib/billing';
-import { saveConfig, useConfig, type ServerConfig } from '../lib/config';
+import { saveConfig, useConfig, type DraftFeed, type ServerConfig } from '../lib/config';
 import type { Defaults } from '../lib/feed';
 import { refreshMe, type Me } from '../lib/me';
 import { planSummary } from '../lib/plan';
 import { Link } from './Link';
 import { NichesEditor, SourcesEditor } from './Editors';
+import { FeedAdder, FeedList } from './Feeds';
+import { MAX_CUSTOM_FEEDS } from '../lib/feeds';
 
 interface Props {
   me: Me;
@@ -22,7 +24,7 @@ export function Settings({ me, defaults }: Props) {
         Settings
       </h2>
       {config && defaults ? (
-        <SettingsForm config={config} defaults={defaults} />
+        <SettingsForm config={config} defaults={defaults} isPro={me.subscription.isPro} />
       ) : (
         <p className="meta" aria-busy="true">
           Loading your settings
@@ -35,7 +37,15 @@ export function Settings({ me, defaults }: Props) {
 
 type TokenMode = 'keep' | 'replace' | 'removed';
 
-function SettingsForm({ config, defaults }: { config: ServerConfig; defaults: Defaults }) {
+function SettingsForm({
+  config,
+  defaults,
+  isPro,
+}: {
+  config: ServerConfig;
+  defaults: Defaults;
+  isPro: boolean;
+}) {
   const allIds = defaults.sources.map((s) => s.id);
   const [niches, setNiches] = useState<Niche[]>(() =>
     config.niches.length > 0 ? config.niches : defaults.niches,
@@ -43,6 +53,7 @@ function SettingsForm({ config, defaults }: { config: ServerConfig; defaults: De
   const [enabled, setEnabled] = useState(
     () => new Set(config.sources.length > 0 ? config.sources : allIds),
   );
+  const [feeds, setFeeds] = useState<DraftFeed[]>(() => config.customFeeds);
   const [telegram, setTelegram] = useState(config.telegramChatId ?? '');
   const [dbId, setDbId] = useState(config.notion?.dbId ?? '');
   const [token, setToken] = useState('');
@@ -82,12 +93,14 @@ function SettingsForm({ config, defaults }: { config: ServerConfig; defaults: De
       await saveConfig(
         {
           ...config,
+          customFeeds: feeds,
           niches,
           sources: allIds.filter((id) => enabled.has(id)),
           telegramChatId: telegram.trim() || null,
           notion,
         },
         newToken,
+        isPro,
       );
       setToken('');
       setTokenMode(notion ? 'keep' : 'replace');
@@ -131,6 +144,51 @@ function SettingsForm({ config, defaults }: { config: ServerConfig; defaults: De
             touch();
           }}
         />
+      </section>
+
+      <section className="settings-sec" aria-labelledby="set-feeds">
+        <h3 id="set-feeds" className="sheet-h">
+          Your feeds
+        </h3>
+        {isPro ? (
+          <>
+            <p className="hint">
+              RSS or Atom feeds you follow, ranked against your niches in your queue. Up to{' '}
+              {MAX_CUSTOM_FEEDS}.
+            </p>
+            <FeedList
+              feeds={feeds}
+              onRemove={(url) => {
+                setFeeds(feeds.filter((f) => f.url !== url));
+                touch();
+              }}
+            />
+            <FeedAdder
+              have={new Set(feeds.map((f) => f.url))}
+              onAdd={(f) => {
+                setFeeds([...feeds, f]);
+                touch();
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <p className="hint">
+              Bring your own RSS or Atom feeds, so niches like space or personal finance have
+              something to rank. This is part of Pro.
+            </p>
+            {config.customFeeds.length > 0 && (
+              <p className="hint">
+                Your {config.customFeeds.length} saved{' '}
+                {config.customFeeds.length === 1 ? 'feed is' : 'feeds are'} paused until you are on
+                Pro again.
+              </p>
+            )}
+            <Link to="pricing" className="link">
+              See Pro
+            </Link>
+          </>
+        )}
       </section>
 
       <section className="settings-sec" aria-labelledby="set-telegram">

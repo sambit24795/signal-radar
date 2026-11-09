@@ -166,6 +166,21 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect(((await bad.json()) as Json).error).toContain('topN');
     });
 
+    it('stamps onboardedAt on the first save only', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const cfg = { niches: [], sources: [], topN: 5, telegramChatId: null, notion: null };
+      const first = (await (await call(ctx.app, '/api/me/config', { user: u })).json()) as Json;
+      expect(first.config.onboardedAt).toBeNull();
+      const a = (await (
+        await call(ctx.app, '/api/me/config', { method: 'PUT', user: u, json: cfg })
+      ).json()) as Json;
+      expect(a.config.onboardedAt).toBeTruthy();
+      const b = (await (
+        await call(ctx.app, '/api/me/config', { method: 'PUT', user: u, json: { ...cfg, topN: 6 } })
+      ).json()) as Json;
+      expect(b.config.onboardedAt).toBe(a.config.onboardedAt);
+    });
+
     it('keeps the stored Notion token when none is sent, and requires one the first time', async () => {
       const u = await signUp(ctx.app, 'ann@example.com');
       const base = { niches: [], sources: [], topN: 5, telegramChatId: null };
@@ -286,6 +301,16 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect(kept.config.customFeeds).toEqual(feeds);
       const cleared = (await (await put(u, [])).json()) as Json;
       expect(cleared.config.customFeeds).toEqual([]);
+    });
+
+    it('assigns the id when the client omits it', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const url = 'https://space.example/rss';
+      const res = await put(u, [{ url, title: 'Space Weekly' }]);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as Json).config.customFeeds).toEqual([
+        { id: feedId(url), url, title: 'Space Weekly' },
+      ]);
     });
 
     it('validates url, id, duplicates and the max of 15', async () => {

@@ -4,7 +4,7 @@ import type { MeState } from '../lib/me';
 interface Props {
   me: MeState;
   /** What the signed-out visitor needs: queue or settings. */
-  feature: 'queue' | 'settings';
+  feature: 'queue' | 'settings' | 'welcome';
 }
 
 export function Gate({ me, feature }: Props) {
@@ -21,6 +21,25 @@ export function Gate({ me, feature }: Props) {
         <h2 className="state-title">Could not check your session</h2>
         <p>The server did not answer. Reload the page to try again.</p>
         <p className="meta">{me.message}</p>
+      </div>
+    );
+  }
+
+  if (feature === 'welcome' && me.status === 'anon') {
+    return (
+      <div className="state">
+        <h2 className="state-title">Set up your radar after you sign in</h2>
+        <p>
+          Create a free account to pick your niches and feeds. Pro is free for the first 7 days.
+        </p>
+        <div className="auth-actions">
+          <Link to="signin" signup className="btn btn-solid">
+            Create an account
+          </Link>
+          <Link to="signin" className="link">
+            Sign in
+          </Link>
+        </div>
       </div>
     );
   }

@@ -16,28 +16,6 @@ export function SignIn({ me, startSignup, onSignOut }: Props) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState(false);
-
-  if (created) {
-    return (
-      <section className="auth" aria-labelledby="auth-title">
-        <h2 id="auth-title" className="page-title">
-          You are in
-        </h2>
-        <p className="lede" role="status">
-          Your 7-day Pro trial has started.
-        </p>
-        <div className="auth-actions">
-          <Link to="queue" className="btn btn-solid">
-            Open the queue
-          </Link>
-          <Link to="settings" className="link">
-            Set your niches
-          </Link>
-        </div>
-      </section>
-    );
-  }
 
   if (me.status === 'ready') {
     return (
@@ -70,8 +48,7 @@ export function SignIn({ me, startSignup, onSignOut }: Props) {
     try {
       await (signup ? signUp(email.trim(), password) : signIn(email.trim(), password));
       await refreshMe();
-      if (signup) setCreated(true);
-      else navigate('/queue');
+      navigate(signup ? '/welcome' : '/queue');
     } catch (err) {
       setError(authErrorMessage(err, mode));
     } finally {

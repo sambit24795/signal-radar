@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ApiError } from '../lib/api';
 import { refreshMe } from '../lib/me';
+import { justOnboarded } from '../lib/onboarding';
 import {
   decideQueueItem,
   fetchQueue,
@@ -145,6 +146,7 @@ export function Queue() {
   }, [decide, undo, toast, status]);
 
   const { items, nextCursor, selected } = state;
+  const welcomed = justOnboarded.use();
 
   return (
     <section aria-labelledby="queue-title">
@@ -166,6 +168,12 @@ export function Queue() {
           ))}
         </div>
       </div>
+      {welcomed && (
+        <p className="note" role="status">
+          You are set up. The queue fills on the next radar run, using the niches and feeds you just
+          chose.
+        </p>
+      )}
       <p className="hint kbd-hint">
         Keys: <kbd>j</kbd> <kbd>k</kbd> move, <kbd>p</kbd> pick, <kbd>s</kbd> skip, <kbd>u</kbd>{' '}
         undo.

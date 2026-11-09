@@ -2,6 +2,18 @@ import type { Niche } from '@radar/core/ranking';
 import { api } from './api';
 import { createStore } from './store';
 
+export interface CustomFeed {
+  id: string;
+  url: string;
+  title: string;
+}
+
+/** A feed being saved: the server assigns `id` when it is missing. */
+export type DraftFeed = Omit<CustomFeed, 'id'> & { id?: string };
+
+/** What a full save sends: a server config whose feeds may not have ids yet. */
+export type ConfigDraft = Omit<ServerConfig, 'customFeeds'> & { customFeeds: DraftFeed[] };
+
 export interface ServerConfig {
   niches: Niche[];
   /** Enabled source ids; empty means "the defaults". */
@@ -9,6 +21,10 @@ export interface ServerConfig {
   topN: number;
   telegramChatId: string | null;
   notion: { dbId: string; hasToken: boolean } | null;
+  /** Pro only. */
+  customFeeds: CustomFeed[];
+  /** Null until the user first saves or skips onboarding. */
+  onboardedAt: string | null;
 }
 
 export interface ConfigState {
@@ -37,12 +53,28 @@ export function clearConfig(): void {
   store.set({ config: null, syncError: false });
 }
 
-/** The body PUT /api/me/config expects. A stored Notion token is kept by omitting it. */
-export function toBody(cfg: ServerConfig, notionToken?: string): Record<string, unknown> {
+/**
+ * The body PUT /api/me/config expects. A stored Notion token is kept by omitting it, and stored
+ * custom feeds are kept unless `withFeeds` (quick edits must not trip the Pro-only feed check).
+ */
+export function toBody(
+  cfg: ConfigDraft,
+  notionToken?: string,
+  withFeeds = false,
+): Record<string, unknown> {
   return {
     niches: cfg.niches,
     sources: cfg.sources,
     topN: cfg.topN,
+    ...(withFeeds
+      ? {
+          customFeeds: cfg.customFeeds.map((f) => ({
+            ...(f.id ? { id: f.id } : {}),
+            url: f.url,
+            title: f.title,
+          })),
+        }
+      : {}),
     telegramChatId: cfg.telegramChatId,
     notion: cfg.notion
       ? notionToken
@@ -53,11 +85,15 @@ export function toBody(cfg: ServerConfig, notionToken?: string): Record<string, 
 }
 
 /** Full save (Settings form). Throws on failure so the form can say so. */
-export async function saveConfig(next: ServerConfig, notionToken?: string): Promise<void> {
+export async function saveConfig(
+  next: ConfigDraft,
+  notionToken?: string,
+  withFeeds = true,
+): Promise<void> {
   clearTimeout(timer);
   const res = await api<{ config: ServerConfig }>('/api/me/config', {
     method: 'PUT',
-    json: toBody(next, notionToken),
+    json: toBody(next, notionToken, withFeeds),
   });
   store.set({ config: res.config, syncError: false });
 }

@@ -143,6 +143,8 @@ export const userConfig = pgTable('user_config', {
   customFeeds: jsonb('custom_feeds').$type<CustomFeedConfig[]>().notNull().default([]),
   telegramChatId: text('telegram_chat_id'),
   notion: jsonb('notion').$type<NotionConfig | null>(),
+  /** Set the first time the user saves or skips their setup; null sends them to onboarding. */
+  onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .defaultNow()
     .$onUpdate(() => new Date())

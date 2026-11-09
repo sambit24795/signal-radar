@@ -44,6 +44,12 @@ export const PlusIcon = () => (
   </svg>
 );
 
+export const CheckIcon = () => (
+  <svg {...base} width={14} height={14} strokeWidth={2}>
+    <path d="M5 12.5 10 17.5 19 7" />
+  </svg>
+);
+
 /** The wordmark's radar arc: two quarter sweeps from a point. */
 export const RadarMark = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">

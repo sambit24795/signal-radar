@@ -20,6 +20,8 @@ const config = (over: Partial<ServerConfig> = {}): ServerConfig => ({
   topN: 10,
   telegramChatId: null,
   notion: null,
+  customFeeds: [],
+  onboardedAt: null,
   ...over,
 });
 const local = (over: Partial<StoredPrefs> = {}): StoredPrefs => ({ ...emptyPrefs(), ...over });

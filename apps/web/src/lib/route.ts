@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
-export type RouteName = 'read' | 'queue' | 'settings' | 'pricing' | 'signin';
+export type RouteName =
+  'landing' | 'welcome' | 'read' | 'queue' | 'settings' | 'pricing' | 'signin';
 
 export interface Route {
   name: RouteName;
@@ -9,7 +10,9 @@ export interface Route {
 }
 
 const PATHS: Record<RouteName, string> = {
-  read: '/',
+  landing: '/',
+  welcome: '/welcome',
+  read: '/read',
   queue: '/queue',
   settings: '/settings',
   pricing: '/pricing',
@@ -20,7 +23,7 @@ const BY_PATH = new Map<string, RouteName>(
   (Object.entries(PATHS) as [RouteName, string][]).map(([name, path]) => [path, name]),
 );
 
-/** Unknown paths fall back to the Read view; a trailing slash is ignored. */
+/** Unknown paths fall back to the Read view; `/` is the landing page; a trailing slash is ignored. */
 export function parseRoute(pathname: string, search = ''): Route {
   const clean = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   const name = BY_PATH.get(clean || '/') ?? 'read';

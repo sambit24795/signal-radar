@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
           name: 'Signal Radar',
           short_name: 'Signal Radar',
           description: 'A ranked radar of what is moving in the niches you follow.',
-          start_url: '/',
+          start_url: '/read',
           scope: '/',
           display: 'standalone',
           background_color: '#f7f7f4',

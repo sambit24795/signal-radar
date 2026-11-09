@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Niche } from '@radar/core/ranking';
 import { Gate } from './components/Gate';
 import { ImportOffer } from './components/ImportOffer';
+import { Landing } from './components/Landing';
 import { Link } from './components/Link';
 import { Masthead } from './components/Masthead';
 import { Pricing } from './components/Pricing';
@@ -9,6 +10,7 @@ import { Queue } from './components/Queue';
 import { ReadView } from './components/ReadView';
 import { Settings } from './components/Settings';
 import { SignIn } from './components/SignIn';
+import { Welcome } from './components/Welcome';
 import { useInstallPrompt, useNow, useOnline, useRadarData } from './hooks';
 import { signOut } from './lib/auth';
 import { clearConfig, loadConfig, patchConfig, useConfig } from './lib/config';
@@ -21,6 +23,8 @@ import {
   type StoredPrefs,
   type Theme,
 } from './lib/prefs';
+import { hasOpenedRadar, landingRedirect, markRadarOpened } from './lib/landing';
+import { justOnboarded, useOnboardingDismissed } from './lib/onboarding';
 import { importFlagKey, mergeServerConfig, shouldOfferImport } from './lib/prefsMerge';
 import { navigate, useRoute, type RouteName } from './lib/route';
 
@@ -37,7 +41,9 @@ function applyTheme(theme: Theme) {
 }
 
 const TITLES: Record<RouteName, string> = {
-  read: 'Signal Radar',
+  landing: 'Signal Radar: find the story before the algorithm does',
+  welcome: 'Set up your radar · Signal Radar',
+  read: 'Read · Signal Radar',
   queue: 'Make queue · Signal Radar',
   settings: 'Settings · Signal Radar',
   pricing: 'Pricing · Signal Radar',
@@ -60,6 +66,7 @@ export function App() {
   const route = useRoute();
   const me = useMe();
   const { config, syncError } = useConfig();
+  const dismissed = useOnboardingDismissed();
 
   const [stored, setStored] = useState<StoredPrefs>(() => loadPrefs(localStorage));
   const [systemDark, setSystemDark] = useState(prefersDark);
@@ -87,6 +94,30 @@ export function App() {
     window.scrollTo(0, 0);
     if (firstRoute.current) firstRoute.current = false;
     else mainRef.current?.focus({ preventScroll: true });
+  }, [route.name]);
+
+  // First visit to the radar: remember it, so `/` goes straight to Read next time.
+  useEffect(() => {
+    if (route.name === 'read') markRadarOpened(localStorage);
+  }, [route.name]);
+
+  // `/` is for first-time visitors; the queue note only lives on the queue.
+  const redirect =
+    route.name === 'landing' ? landingRedirect(me.status, hasOpenedRadar(localStorage)) : null;
+  const needsSetup =
+    userId !== null && config !== null && config.onboardedAt === null && !dismissed;
+  useEffect(() => {
+    if (
+      needsSetup &&
+      (route.name === 'landing' || route.name === 'read' || route.name === 'queue')
+    ) {
+      navigate('/welcome', true);
+    } else if (redirect && redirect !== 'wait') {
+      navigate(redirect, true);
+    }
+  }, [needsSetup, redirect, route.name]);
+  useEffect(() => {
+    if (route.name !== 'queue') justOnboarded.set(false);
   }, [route.name]);
 
   const update = useCallback((next: StoredPrefs) => {
@@ -140,7 +171,9 @@ export function App() {
     }
     clearMe();
     clearConfig();
-    if (route.name === 'queue' || route.name === 'settings') navigate('/');
+    if (route.name === 'queue' || route.name === 'settings' || route.name === 'welcome') {
+      navigate('/');
+    }
   }, [route.name]);
 
   const offer =
@@ -153,7 +186,7 @@ export function App() {
       <a className="skip" href="#main">
         Skip to the content
       </a>
-      <div className="page">
+      <div className={route.name === 'landing' ? 'page page-wide' : 'page'}>
         <Masthead
           route={route.name}
           me={me}
@@ -173,6 +206,31 @@ export function App() {
         )}
 
         <main id="main" ref={mainRef} tabIndex={-1} className="main">
+          {route.name === 'landing' &&
+            (redirect === null && !needsSetup ? (
+              <Landing data={data} now={now} retry={retry} />
+            ) : (
+              <p className="meta" aria-busy="true">
+                Loading
+              </p>
+            ))}
+          {route.name === 'welcome' &&
+            (me.status === 'ready' ? (
+              config && defaults ? (
+                <Welcome
+                  config={config}
+                  defaults={defaults}
+                  isPro={me.me.subscription.isPro}
+                  localNiches={stored.niches}
+                />
+              ) : (
+                <p className="meta" aria-busy="true">
+                  Loading your settings
+                </p>
+              )
+            ) : (
+              <Gate me={me} feature="welcome" />
+            ))}
           {route.name === 'read' && (
             <ReadView
               data={data}
@@ -205,16 +263,19 @@ export function App() {
           )}
         </main>
 
-        {route.name !== 'pricing' && !(me.status === 'ready' && me.me.subscription.isPro) && (
-          <footer className="footer">
-            <p>
-              Pro adds AI-scored hooks and a personal queue.{' '}
-              <Link to="pricing" className="link">
-                See Pricing
-              </Link>
-            </p>
-          </footer>
-        )}
+        {route.name !== 'pricing' &&
+          route.name !== 'landing' &&
+          route.name !== 'welcome' &&
+          !(me.status === 'ready' && me.me.subscription.isPro) && (
+            <footer className="footer">
+              <p>
+                Pro adds AI-scored hooks and a personal queue.{' '}
+                <Link to="pricing" className="link">
+                  See Pricing
+                </Link>
+              </p>
+            </footer>
+          )}
       </div>
     </>
   );

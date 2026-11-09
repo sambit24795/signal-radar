@@ -20,7 +20,8 @@ export const MAX_CUSTOM_FEEDS = 15;
 
 const CustomFeedSchema = z
   .object({
-    id: z.string(),
+    /** Optional: assigned from the url when omitted, and must match it when given. */
+    id: z.string().optional(),
     url: z.string().max(2000),
     title: z.string().trim().min(1).max(120),
   })
@@ -31,10 +32,11 @@ const CustomFeedSchema = z
       ctx.addIssue({ code: 'custom', path: ['url'], message: (e as Error).message });
       return;
     }
-    if (f.id !== customFeedId(f.url)) {
+    if (f.id !== undefined && f.id !== customFeedId(f.url)) {
       ctx.addIssue({ code: 'custom', path: ['id'], message: 'must be custom:<hash of url>' });
     }
-  });
+  })
+  .transform((f) => ({ id: customFeedId(f.url), url: f.url, title: f.title }));
 
 const ConfigBody = z.object({
   niches: z.array(NicheSchema).max(20),
@@ -106,13 +108,15 @@ export function meRoutes(deps: RouteDeps) {
       if (!isPro(sub)) return c.json({ error: 'Custom feeds need Pro' }, 402);
     }
     const [existing] = await db
-      .select({ notion: schema.userConfig.notion })
+      .select({ notion: schema.userConfig.notion, onboardedAt: schema.userConfig.onboardedAt })
       .from(schema.userConfig)
       .where(eq(schema.userConfig.userId, userId));
     const token = notionIn?.token ?? existing?.notion?.token;
     if (notionIn && !token) return badRequest('notion.token: required the first time');
     const notion = notionIn && token ? { token, dbId: notionIn.dbId } : null;
-    const values = { ...body, ...(customFeeds ? { customFeeds } : {}), notion };
+    // Saving (or skipping) setup counts as onboarding; it is stamped once.
+    const onboardedAt = existing?.onboardedAt ?? new Date();
+    const values = { ...body, ...(customFeeds ? { customFeeds } : {}), notion, onboardedAt };
     const [cfg] = await db
       .insert(schema.userConfig)
       .values({ userId, ...values })

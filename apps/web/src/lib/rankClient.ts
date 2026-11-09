@@ -18,9 +18,15 @@ export interface RankOptions {
   topN?: number;
 }
 
-/** Runs the core keyword prefilter and ranking over the feed against the user's niches. */
+/**
+ * Runs the core keyword prefilter and ranking over the feed against the user's niches.
+ * With no niches nothing can match, so everything is kept and ranked by momentum alone.
+ */
 export function rankFeed(items: Item[], niches: Niche[], opts: RankOptions = {}): ScoredItem[] {
   const { sources, topN = 100 } = opts;
   const pool = sources ? items.filter((i) => inSources(i, sources)) : items;
-  return rank(prefilter(pool, niches), topN);
+  return rank(
+    prefilter(pool, niches, () => niches.length === 0),
+    topN,
+  );
 }

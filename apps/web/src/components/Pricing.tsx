@@ -13,7 +13,7 @@ const FREE = [
 const PRO = [
   'AI scoring for every item',
   'A hook and an angle written for each one',
-  'A Make queue that learns from what you pick and skip',
+  'An Ideas queue that learns from what you pick and skip',
   'A Telegram digest after each run',
   'Picked items synced to Notion',
 ];

@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Niche } from '@radar/core/ranking';
 import type { SourceRef } from '../lib/feed';
 import { CloseIcon } from '../icons';
-import { NichesEditor, SourcesEditor } from './Editors';
+import { SourcesEditor } from './Editors';
+import { TopicPicker } from './TopicPicker';
 
 interface Props {
   open: boolean;
@@ -12,7 +13,7 @@ interface Props {
   enabledSourceIds: Set<string>;
   onNiches: (niches: Niche[]) => void;
   onToggleSource: (id: string) => void;
-  onReset: () => void;
+  onStartOver: () => void;
   /** Signed in and the last background save to the account failed. */
   syncError?: boolean;
 }
@@ -25,16 +26,18 @@ export function CustomizeSheet({
   enabledSourceIds,
   onNiches,
   onToggleSource,
-  onReset,
+  onStartOver,
   syncError = false,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) d.showModal();
     if (!open && d.open) d.close();
+    if (!open) setConfirming(false);
   }, [open]);
 
   return (
@@ -62,16 +65,19 @@ export function CustomizeSheet({
           <div className="sheet-body">
             <section aria-labelledby="niches-h">
               <h3 id="niches-h" className="sheet-h">
-                Niches
+                Your topics
               </h3>
-              <p className="hint">Items are ranked by how well they match these keywords.</p>
-              <NichesEditor niches={niches} onChange={onNiches} />
+              <p className="hint">
+                Stories are ranked by how well they match the words behind each topic.
+              </p>
+              <TopicPicker niches={niches} onChange={onNiches} />
             </section>
 
             <section aria-labelledby="sources-h">
               <h3 id="sources-h" className="sheet-h">
                 Sources
               </h3>
+              <p className="hint">Where stories are read from. Switch off any you do not want.</p>
               <SourcesEditor
                 sources={allSources}
                 enabled={enabledSourceIds}
@@ -81,12 +87,26 @@ export function CustomizeSheet({
           </div>
 
           <div className="sheet-foot">
-            <div className="sheet-foot-start">
-              <button type="button" className="link" onClick={onReset}>
-                Reset to defaults
-              </button>
-              {syncError && <span className="warn">Not saved to your account yet.</span>}
-            </div>
+            {confirming ? (
+              <div className="sheet-foot-start" role="alert">
+                <span className="confirm-q">Clear all your topics?</span>
+                <button type="button" className="link" onClick={onStartOver}>
+                  Yes, clear them
+                </button>
+                <button type="button" className="link-quiet" onClick={() => setConfirming(false)}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="sheet-foot-start">
+                {niches.length > 0 && (
+                  <button type="button" className="link-quiet" onClick={() => setConfirming(true)}>
+                    Start over
+                  </button>
+                )}
+                {syncError && <span className="warn">Not saved to your account yet.</span>}
+              </div>
+            )}
             <button type="button" className="btn btn-solid" onClick={onClose}>
               Done
             </button>

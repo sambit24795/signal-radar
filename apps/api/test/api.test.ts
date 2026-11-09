@@ -727,13 +727,11 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect((await call(ctx.app, '/api/feed?limit=501')).status).toBe(400);
     });
 
-    it('serves default niches and sources from radar.config.ts', async () => {
+    it('serves default sources from radar.config.ts and no niches', async () => {
       const res = await call(ctx.app, '/api/feed/defaults');
       expect(res.status).toBe(200);
       const body = (await res.json()) as Json;
-      expect(body.niches.length).toBe(radarConfig.niches.length);
-      expect(body.niches[0]).toMatchObject({ id: 'ai', weight: 1 });
-      expect(body.niches[0].keywords.length).toBeGreaterThan(0);
+      expect(body.niches).toEqual([]);
       expect(body.sources).toContainEqual({ id: 'hn', name: 'Hacker News', type: 'hn' });
       expect(body.sources).toContainEqual({ id: 'reddit', name: 'Reddit', type: 'reddit' });
       for (const s of body.sources) expect(Object.keys(s).sort()).toEqual(['id', 'name', 'type']);

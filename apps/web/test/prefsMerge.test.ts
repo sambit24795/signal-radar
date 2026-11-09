@@ -59,6 +59,6 @@ describe('import offer', () => {
     const p = importPayload(local({ niches: [niche('mine')], disabledSources: ['rd'] }), defaults);
     expect(p.niches.map((n) => n.id)).toEqual(['mine']);
     expect(p.sources).toEqual(['hn', 'gh']);
-    expect(importPayload(local(), defaults).niches).toBe(defaults.niches);
+    expect(importPayload(local(), defaults).niches).toEqual([]);
   });
 });

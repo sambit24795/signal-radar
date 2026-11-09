@@ -12,9 +12,9 @@ const FeedQuery = z.object({
   niche: z.string().min(1).optional(),
 });
 
-/** Default niches and sources shown to visitors who have not customized anything. */
+/** Default sources for visitors. Niches stay empty: topics belong to the user, never to the owner's config. */
 const defaults = {
-  niches: radarConfig.niches,
+  niches: [] as never[],
   sources: buildSources(radarConfig.sources, { rsshubBase: radarConfig.rsshubBase })
     .filter((s) => s.status.ok)
     .map((s) => ({ id: s.id, name: s.name, type: s.kind })),

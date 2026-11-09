@@ -47,6 +47,13 @@ describe('rankFeed', () => {
     expect(rankFeed(items, [niches[1]!]).map((i) => i.title)).toEqual(['Golang tips']);
   });
 
+  it('with no niches keeps everything and ranks by momentum alone', () => {
+    const items = [mk('Quiet post'), mk('Rising fast', { momentum: { perHour: 40, points: 300 } })];
+    const out = rankFeed(items, []);
+    expect(out.map((i) => i.title)).toEqual(['Rising fast', 'Quiet post']);
+    expect(out.every((i) => i.keywordScore === 0)).toBe(true);
+  });
+
   it('honours topN', () => {
     const items = [mk('Claude one'), mk('Claude two'), mk('Claude three')];
     expect(rankFeed(items, niches, { topN: 2 })).toHaveLength(2);

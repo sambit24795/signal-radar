@@ -1,22 +1,20 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Niche } from '@radar/core/ranking';
 import { saveConfig, type DraftFeed, type ServerConfig } from '../lib/config';
 import type { Defaults } from '../lib/feed';
 import { hostOf, MAX_CUSTOM_FEEDS } from '../lib/feeds';
-import { keywordText, newNicheId, parseKeywords } from '../lib/niches';
 import {
   defaultFeedPicks,
   dismissOnboarding,
   justOnboarded,
   suggestedFeeds,
-  togglePreset,
 } from '../lib/onboarding';
 import { MAX_NICHES, PRESETS } from '../lib/presets';
 import { navigate } from '../lib/route';
-import { CheckIcon, PlusIcon, TrashIcon } from '../icons';
 import { SourcesEditor } from './Editors';
 import { FeedAdder, FeedList } from './Feeds';
 import { Link } from './Link';
+import { TopicPicker } from './TopicPicker';
 
 interface Props {
   config: ServerConfig;
@@ -26,17 +24,12 @@ interface Props {
   localNiches: Niche[] | null;
 }
 
-const PRESET_IDS = new Set(PRESETS.map((p) => p.id));
-
 /** Two short steps after sign-up: what you follow, then where it is read from. */
 export function Welcome({ config, defaults, isPro, localNiches }: Props) {
   const allIds = defaults.sources.map((s) => s.id);
   const [step, setStep] = useState<1 | 2>(1);
   const [niches, setNiches] = useState<Niche[]>(() =>
-    (localNiches ?? (config.niches.length > 0 ? config.niches : defaults.niches)).slice(
-      0,
-      MAX_NICHES,
-    ),
+    (localNiches ?? config.niches).slice(0, MAX_NICHES),
   );
   const [enabled, setEnabled] = useState(
     () => new Set(config.sources.length > 0 ? config.sources : allIds),
@@ -114,7 +107,7 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
     <section className="welcome" aria-labelledby="welcome-title">
       <div className="welcome-top">
         <ol className="stepbar" aria-label="Setup steps">
-          {(['Niches', 'Sources'] as const).map((label, i) => (
+          {(['Topics', 'Sources'] as const).map((label, i) => (
             <li key={label} aria-current={step === i + 1 ? 'step' : undefined}>
               <span className="rank" aria-hidden="true">
                 {i + 1}
@@ -138,48 +131,7 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
             change all of this later in Settings.
           </p>
 
-          <ul className="chips chips-wrap" aria-label="Topics">
-            {PRESETS.map((p) => {
-              const on = niches.some((n) => n.id === p.id);
-              return (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    className="chip"
-                    aria-pressed={on}
-                    disabled={!on && niches.length >= MAX_NICHES}
-                    onClick={() => setNiches(togglePreset(niches, p.id))}
-                  >
-                    {on && <CheckIcon />}
-                    {p.name}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="meta" aria-live="polite">
-            {niches.length} of {MAX_NICHES} selected
-          </p>
-
-          {niches.length > 0 && (
-            <div className="picked">
-              <h3 className="sheet-h">Your niches</h3>
-              <ul>
-                {niches.map((n) => (
-                  <PickedNiche
-                    key={n.id}
-                    niche={n}
-                    onChange={(next) => setNiches(niches.map((x) => (x.id === n.id ? next : x)))}
-                    onRemove={() => setNiches(niches.filter((x) => x.id !== n.id))}
-                  />
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {niches.length < MAX_NICHES && (
-            <AddOwn onAdd={(n) => setNiches([...niches, { ...n, id: newNicheId(niches) }])} />
-          )}
+          <TopicPicker niches={niches} onChange={setNiches} />
 
           <div className="welcome-foot">
             <button
@@ -285,7 +237,7 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
               {busy ? 'Saving' : 'Finish setup'}
             </button>
             <button type="button" className="link" onClick={() => setStep(1)}>
-              Back to niches
+              Back to topics
             </button>
           </div>
           <p className="hint">
@@ -301,130 +253,5 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
         </>
       )}
     </section>
-  );
-}
-
-/** One chosen niche: its keywords at a glance, editable on demand. */
-function PickedNiche({
-  niche,
-  onChange,
-  onRemove,
-}: {
-  niche: Niche;
-  onChange: (n: Niche) => void;
-  onRemove: () => void;
-}) {
-  const custom = !PRESET_IDS.has(niche.id);
-  const [name, setName] = useState(niche.name);
-  const [words, setWords] = useState(() => keywordText(niche));
-  const kws = parseKeywords(words, niche.keywords);
-  const valid = name.trim().length > 0 && kws.length > 0;
-
-  const commit = (nextName: string, nextWords: string) => {
-    const k = parseKeywords(nextWords, niche.keywords);
-    if (nextName.trim() && k.length > 0) onChange({ ...niche, name: nextName.trim(), keywords: k });
-  };
-
-  return (
-    <li className="picked-row">
-      <details>
-        <summary>
-          <span className="picked-name">{niche.name}</span>
-          <span className="meta picked-kw">{keywordText(niche)}</span>
-        </summary>
-        <div className="picked-edit">
-          {custom && (
-            <label className="field">
-              <span className="field-label">Name</span>
-              <input
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  commit(e.target.value, words);
-                }}
-                autoComplete="off"
-              />
-            </label>
-          )}
-          <label className="field">
-            <span className="field-label">Keywords, separated by commas</span>
-            <input
-              value={words}
-              onChange={(e) => {
-                setWords(e.target.value);
-                commit(name, e.target.value);
-              }}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              aria-invalid={!valid}
-            />
-          </label>
-          <div className="niche-foot">
-            {valid ? <span /> : <span className="warn">Needs at least one keyword to apply.</span>}
-            <button type="button" className="btn btn-quiet" onClick={onRemove}>
-              <TrashIcon /> Remove
-            </button>
-          </div>
-        </div>
-      </details>
-    </li>
-  );
-}
-
-function AddOwn({ onAdd }: { onAdd: (n: Omit<Niche, 'id'>) => void }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [words, setWords] = useState('');
-  const kws = parseKeywords(words, []);
-
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-quiet add-own" onClick={() => setOpen(true)}>
-        <PlusIcon /> Add your own
-      </button>
-    );
-  }
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || kws.length === 0) return;
-    onAdd({ name: name.trim(), weight: 1, keywords: kws });
-    setName('');
-    setWords('');
-    setOpen(false);
-  };
-
-  return (
-    <form className="add-own-form" onSubmit={submit}>
-      <label className="field">
-        <span className="field-label">Name</span>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoComplete="off"
-          autoFocus
-        />
-      </label>
-      <label className="field">
-        <span className="field-label">Keywords, separated by commas</span>
-        <input
-          value={words}
-          onChange={(e) => setWords(e.target.value)}
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          placeholder="urban gardening, composting, raised beds"
-        />
-      </label>
-      <div className="auth-actions">
-        <button type="submit" className="btn" disabled={!name.trim() || kws.length === 0}>
-          Add niche
-        </button>
-        <button type="button" className="link" onClick={() => setOpen(false)}>
-          Cancel
-        </button>
-      </div>
-    </form>
   );
 }

@@ -3,7 +3,7 @@ import { createStore } from './store';
 import { MAX_CUSTOM_FEEDS } from './feeds';
 import { MAX_NICHES, presetById, presetToNiche, type PresetFeed } from './presets';
 
-/** Set when onboarding finishes, so the Make queue can say why it is still empty. */
+/** Set when onboarding finishes, so Ideas can say why it is still empty. */
 export const justOnboarded = createStore(false);
 
 /** Skipping or finishing in this tab means do not send the user back to setup again. */

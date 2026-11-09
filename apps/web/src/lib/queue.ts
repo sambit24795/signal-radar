@@ -1,4 +1,5 @@
 import { api } from './api';
+import { formatUpdated } from './format';
 
 export type QueueStatus = 'new' | 'picked' | 'skipped';
 
@@ -14,6 +15,11 @@ export interface QueueItem {
   titleDraft: string | null;
   format: string | null;
   reasons: string[];
+  /** Plain description of the story, from the AI or cleaned from the source snippet. */
+  summary?: string | null;
+  /** Why the story is in the list, in plain words. */
+  why?: string | null;
+  effort?: 'S' | 'M' | 'L' | null;
   status: QueueStatus;
   createdAt: string;
   decidedAt: string | null;
@@ -105,3 +111,45 @@ export const STATUS_LABEL: Record<QueueStatus, string> = {
   picked: 'Picked',
   skipped: 'Skipped',
 };
+
+const EFFORT: Record<'S' | 'M' | 'L', string> = {
+  S: 'small effort',
+  M: 'medium effort',
+  L: 'large effort',
+};
+
+/** "small effort" for S/M/L; empty when the item has none. */
+export function effortLabel(effort: QueueItem['effort']): string {
+  return effort ? (EFFORT[effort] ?? '') : '';
+}
+
+/** The meta line: source, topic, age, effort; whatever is missing is left out. */
+export function queueMeta(item: QueueItem, now: number = Date.now()): string[] {
+  const age = formatUpdated(item.createdAt, now);
+  return [item.source, item.niche, age, effortLabel(item.effort)].filter((p): p is string => !!p);
+}
+
+/** What the Copy action puts on the clipboard: the hook, else the title draft, else the title. */
+export function copyText(item: QueueItem): { label: string; text: string } {
+  if (item.hook) return { label: 'Copy hook', text: item.hook };
+  if (item.titleDraft) return { label: 'Copy title', text: item.titleDraft };
+  return { label: 'Copy title', text: item.title };
+}
+
+export const HINT_KEY = 'signal-radar:queue-hint-seen';
+
+export function hintSeen(storage: Pick<Storage, 'getItem'>): boolean {
+  try {
+    return storage.getItem(HINT_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function markHintSeen(storage: Pick<Storage, 'setItem'>): void {
+  try {
+    storage.setItem(HINT_KEY, '1');
+  } catch {
+    /* private mode: the hint just shows again next time */
+  }
+}

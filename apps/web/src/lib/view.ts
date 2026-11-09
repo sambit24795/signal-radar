@@ -1,37 +1,50 @@
-import type { Item, ScoredItem } from '@radar/core/ranking';
+import type { Item, Niche, ScoredItem } from '@radar/core/ranking';
 import type { SourceRef } from './feed';
 import { compact, domainOf, formatAge } from './format';
 
-export type TabId = 'top' | Item['sourceKind'];
+/** Which source a view is narrowed to; sources are a quiet filter, topics are the tabs. */
+export type SourceFilter = 'all' | Item['sourceKind'];
 
-export const TABS: { id: TabId; label: string }[] = [
-  { id: 'top', label: 'Top' },
+export const SOURCE_FILTERS: { id: SourceFilter; label: string }[] = [
+  { id: 'all', label: 'All sources' },
   { id: 'hn', label: 'Hacker News' },
   { id: 'reddit', label: 'Reddit' },
   { id: 'github', label: 'GitHub' },
-  { id: 'rss', label: 'Videos/RSS' },
+  { id: 'rss', label: 'Videos and feeds' },
 ];
 
-/** Top is always there; a source tab appears while at least one source of its type is on. */
-export function visibleTabs(sources: SourceRef[]) {
-  return TABS.filter((t) => t.id === 'top' || sources.some((s) => s.type === t.id));
+/** "All sources" is always there; a source type appears while at least one source of it is on. */
+export function visibleSourceFilters(sources: SourceRef[]) {
+  return SOURCE_FILTERS.filter((t) => t.id === 'all' || sources.some((s) => s.type === t.id));
 }
 
-/** The rows for one tab, optionally narrowed to one niche. `ranked` is already best-first. */
+/** The "All" topic tab. */
+export const ALL_TOPICS = 'all';
+
+/** Topic tabs: "All", then the user's own topics in the order they chose them. */
+export function topicTabs(niches: Niche[]): { id: string; label: string }[] {
+  return [
+    { id: ALL_TOPICS, label: 'All' },
+    ...niches.map((n) => ({ id: n.id, label: nicheLabel(n.name) })),
+  ];
+}
+
+/** The rows for one topic, optionally narrowed to one source type. `ranked` is already best-first. */
 export function selectView(
   ranked: ScoredItem[],
-  tab: TabId,
   nicheId: string | null,
+  source: SourceFilter = 'all',
   limit = 100,
 ): ScoredItem[] {
   return ranked
     .filter(
-      (i) => (tab === 'top' || i.sourceKind === tab) && (!nicheId || i.niches.includes(nicheId)),
+      (i) =>
+        (source === 'all' || i.sourceKind === source) && (!nicheId || i.niches.includes(nicheId)),
     )
     .slice(0, limit);
 }
 
-/** Short niche label for chips: the full name is often a sentence ("AI tools, coding with AI"). */
+/** Short niche label for tabs: the full name is often a sentence ("AI tools, coding with AI"). */
 export function nicheLabel(name: string): string {
   return name.split(',')[0]!.trim() || name;
 }

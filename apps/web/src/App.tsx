@@ -17,7 +17,7 @@ import { clearConfig, loadConfig, patchConfig, useConfig } from './lib/config';
 import { clearMe, useMe } from './lib/me';
 import {
   loadPrefs,
-  resetPrefs,
+  startOver,
   resolvePrefs,
   savePrefs,
   type StoredPrefs,
@@ -44,7 +44,7 @@ const TITLES: Record<RouteName, string> = {
   landing: 'Signal Radar: find the story before the algorithm does',
   welcome: 'Set up your radar · Signal Radar',
   read: 'Read · Signal Radar',
-  queue: 'Make queue · Signal Radar',
+  queue: 'Ideas · Signal Radar',
   settings: 'Settings · Signal Radar',
   pricing: 'Pricing · Signal Radar',
   signin: 'Sign in · Signal Radar',
@@ -141,7 +141,7 @@ export function App() {
 
   const setNiches = (niches: Niche[]) => {
     if (signedIn) patchConfig({ niches });
-    else update({ ...stored, niches });
+    update({ ...stored, niches: signedIn ? stored.niches : niches, showAll: false });
   };
   const toggleSource = (id: string) => {
     if (signedIn && prefs && defaults) {
@@ -158,10 +158,12 @@ export function App() {
       });
     }
   };
-  const reset = () => {
-    setStored(resetPrefs(localStorage));
-    if (signedIn) patchConfig({ niches: [], sources: [] });
+  const clearTopics = () => {
+    setStored(startOver(localStorage));
+    if (signedIn) patchConfig({ niches: [] });
   };
+  const showEverything = () => update({ ...stored, niches: null, showAll: true });
+  const settling = me.status === 'loading' || (userId !== null && config === null);
 
   const onSignOut = useCallback(async () => {
     try {
@@ -242,7 +244,9 @@ export function App() {
               syncError={syncError}
               onNiches={setNiches}
               onToggleSource={toggleSource}
-              onReset={reset}
+              onStartOver={clearTopics}
+              onShowAll={showEverything}
+              settling={settling}
             />
           )}
           {route.name === 'queue' &&

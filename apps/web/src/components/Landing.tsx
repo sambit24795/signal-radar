@@ -149,7 +149,7 @@ export function Landing({ data, now, retry }: { data: Data; now: number; retry: 
                 <span className="meta"> per month, 7 days free</span>
               </p>
               <p>
-                The Make queue with a hook and angle for each item, your own RSS feeds, a Telegram
+                The Ideas queue with a hook and angle for each item, your own RSS feeds, a Telegram
                 digest and Notion sync.
               </p>
             </div>

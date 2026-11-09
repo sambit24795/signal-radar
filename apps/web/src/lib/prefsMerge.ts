@@ -36,7 +36,7 @@ export function importPayload(
 ): { niches: ServerConfig['niches']; sources: string[] } {
   const off = new Set(stored.disabledSources);
   return {
-    niches: stored.niches ?? defaults.niches,
+    niches: stored.niches ?? [],
     sources: defaults.sources.map((s) => s.id).filter((id) => !off.has(id)),
   };
 }

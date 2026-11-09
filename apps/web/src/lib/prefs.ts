@@ -12,6 +12,8 @@ export interface StoredPrefs {
   niches: Niche[] | null;
   /** Ids of default sources the user switched off (new default sources stay on). */
   disabledSources: string[];
+  /** Chose "skip, show everything": no topics, ranked by momentum only. */
+  showAll: boolean;
   theme: Theme;
 }
 
@@ -19,6 +21,8 @@ export interface Prefs {
   niches: Niche[];
   sources: SourceRef[];
   theme: Theme;
+  /** No topics chosen and not skipped: the Read view asks first. */
+  needsTopics: boolean;
 }
 
 export type PrefsStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -27,6 +31,7 @@ export const emptyPrefs = (): StoredPrefs => ({
   version: PREFS_VERSION,
   niches: null,
   disabledSources: [],
+  showAll: false,
   theme: 'system',
 });
 
@@ -71,6 +76,7 @@ export function loadPrefs(storage: PrefsStorage): StoredPrefs {
     disabledSources: Array.isArray(p.disabledSources)
       ? p.disabledSources.filter((s): s is string => typeof s === 'string')
       : [],
+    showAll: p.showAll === true,
     theme: p.theme === 'light' || p.theme === 'dark' ? p.theme : 'system',
   };
 }
@@ -85,19 +91,21 @@ export function savePrefs(storage: PrefsStorage, prefs: StoredPrefs): boolean {
   }
 }
 
-/** Back to the API's niches and sources; the theme choice is kept. */
-export function resetPrefs(storage: PrefsStorage): StoredPrefs {
-  const next = { ...emptyPrefs(), theme: loadPrefs(storage).theme };
+/** Clears the user's topics so the picker shows again. Sources and theme are kept; no one else's topics come back. */
+export function startOver(storage: PrefsStorage): StoredPrefs {
+  const next = { ...loadPrefs(storage), niches: null, showAll: false };
   savePrefs(storage, next);
   return next;
 }
 
-/** Applies saved choices on top of the API defaults. */
+/** Applies saved choices on top of the API's sources. Topics are only ever the user's own. */
 export function resolvePrefs(stored: StoredPrefs, defaults: Defaults): Prefs {
   const off = new Set(stored.disabledSources);
+  const niches = stored.niches ?? defaults.niches;
   return {
-    niches: stored.niches ?? defaults.niches,
+    niches,
     sources: defaults.sources.filter((s) => !off.has(s.id)),
     theme: stored.theme,
+    needsTopics: niches.length === 0 && !stored.showAll,
   };
 }

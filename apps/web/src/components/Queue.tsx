@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ApiError } from '../lib/api';
 import { refreshMe } from '../lib/me';
+import { useNow } from '../hooks';
 import { justOnboarded } from '../lib/onboarding';
 import {
   decideQueueItem,
   fetchQueue,
+  hintSeen,
   initialQueue,
+  markHintSeen,
   queueReducer,
   STATUS_LABEL,
   type QueueItem,
   type QueueStatus,
 } from '../lib/queue';
+import { QueueRow } from './QueueRow';
+import { Tabs } from './Tabs';
 
 const STATUSES: QueueStatus[] = ['new', 'picked', 'skipped'];
 
@@ -29,6 +34,8 @@ export function Queue() {
   const [load, setLoad] = useState<Load>('loading');
   const [error, setError] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
+  const [hint, setHint] = useState(() => !hintSeen(localStorage));
+  const now = useNow();
   const toastId = useRef(0);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -77,9 +84,15 @@ export function Queue() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  const dismissHint = useCallback(() => {
+    markHintSeen(localStorage);
+    setHint(false);
+  }, []);
+
   const decide = useCallback(
     async (item: QueueItem, to: QueueStatus) => {
       if (item.status === to) return;
+      dismissHint();
       const index = stateRef.current.items.findIndex((i) => i.id === item.id);
       dispatch({ type: 'remove', id: item.id });
       say(to === 'new' ? 'Moved back to New.' : to === 'picked' ? 'Picked.' : 'Skipped.', {
@@ -94,7 +107,7 @@ export function Queue() {
         say('Could not save that. The item is back where it was.');
       }
     },
-    [say, fail],
+    [say, fail, dismissHint],
   );
 
   const undo = useCallback(async () => {
@@ -152,101 +165,117 @@ export function Queue() {
     <section aria-labelledby="queue-title">
       <div className="page-head">
         <h2 id="queue-title" className="page-title">
-          Make queue
+          Your ideas
         </h2>
-        <div className="seg" role="group" aria-label="Queue status">
-          {STATUSES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="seg-btn"
-              aria-pressed={s === status}
-              onClick={() => setStatus(s)}
-            >
-              {STATUS_LABEL[s]}
-            </button>
-          ))}
-        </div>
+        <details className="keys">
+          <summary>Keys</summary>
+          <p>
+            <kbd>j</kbd> <kbd>k</kbd> move, <kbd>p</kbd> pick, <kbd>s</kbd> skip, <kbd>u</kbd> undo
+          </p>
+        </details>
       </div>
+      <p className="lede queue-lede">
+        Stories picked for your topics after each run. Pick the ones worth making something about
+        and skip the rest. Picked ideas are kept on the Picked tab.
+      </p>
+      <Tabs
+        tabs={STATUSES.map((s) => ({ id: s, label: STATUS_LABEL[s] }))}
+        active={status}
+        onChange={(id) => setStatus(id as QueueStatus)}
+        label="Idea status"
+        panelId="queue-panel"
+        idPrefix="qstatus"
+      />
       {welcomed && (
         <p className="note" role="status">
-          You are set up. The queue fills on the next radar run, using the niches and feeds you just
+          You are set up. Ideas arrive after the next radar run, using the topics and feeds you just
           chose.
         </p>
       )}
-      <p className="hint kbd-hint">
-        Keys: <kbd>j</kbd> <kbd>k</kbd> move, <kbd>p</kbd> pick, <kbd>s</kbd> skip, <kbd>u</kbd>{' '}
-        undo.
-      </p>
-
-      {load === 'loading' && (
-        <ol className="items" aria-hidden="true">
-          {Array.from({ length: 4 }, (_, i) => (
-            <li key={i} className="qrow skeleton">
-              <span className="rank" />
-              <div className="item-body">
-                <div className="bar" style={{ width: `${86 - i * 11}%` }} />
-                <div className="bar short" style={{ width: `${44 + i * 6}%` }} />
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {load === 'error' && (
-        <div className="state" role="alert">
-          <h2 className="state-title">The queue did not load</h2>
-          <p>
-            <button
-              type="button"
-              className="link"
-              onClick={() => void loadPage(null, false, { stale: false })}
-            >
-              Try again
-            </button>
-          </p>
-          <p className="meta">{error}</p>
-        </div>
-      )}
-
-      {(load === 'ready' || load === 'more') &&
-        (items.length === 0 ? (
-          <div className="state">
-            <h2 className="state-title">
-              {status === 'new' ? 'Nothing waiting' : `Nothing ${status} yet`}
-            </h2>
-            <p>
-              {status === 'new'
-                ? 'New items land here after each radar run. Check back after the next one.'
-                : 'Items you move here show up in this list.'}
-            </p>
-          </div>
-        ) : (
-          <ol className="items">
-            {items.map((item) => (
-              <QueueRow
-                key={item.id}
-                item={item}
-                selected={item.id === selected}
-                onSelect={() => dispatch({ type: 'select', id: item.id })}
-                onDecide={(to) => void decide(item, to)}
-              />
+      <div
+        id="queue-panel"
+        role="tabpanel"
+        aria-labelledby={`qstatus-${status}`}
+        className="qpanel"
+      >
+        {load === 'loading' && (
+          <ol className="items" aria-hidden="true">
+            {Array.from({ length: 4 }, (_, i) => (
+              <li key={i} className="qrow skeleton">
+                <span className="rank" />
+                <div className="item-body">
+                  <div className="bar" style={{ width: `${86 - i * 11}%` }} />
+                  <div className="bar short" style={{ width: `${44 + i * 6}%` }} />
+                </div>
+              </li>
             ))}
           </ol>
-        ))}
+        )}
 
-      {nextCursor && (load === 'ready' || load === 'more') && (
-        <div className="more">
-          <button
-            type="button"
-            className="btn"
-            disabled={load === 'more'}
-            onClick={() => void loadPage(nextCursor, true, { stale: false })}
-          >
-            {load === 'more' ? 'Loading' : 'Load more'}
-          </button>
-        </div>
-      )}
+        {load === 'error' && (
+          <div className="state" role="alert">
+            <h2 className="state-title">The queue did not load</h2>
+            <p>
+              <button
+                type="button"
+                className="link"
+                onClick={() => void loadPage(null, false, { stale: false })}
+              >
+                Try again
+              </button>
+            </p>
+            <p className="meta">{error}</p>
+          </div>
+        )}
+
+        {(load === 'ready' || load === 'more') &&
+          (items.length === 0 ? (
+            <div className="state">
+              <h2 className="state-title">
+                {status === 'new'
+                  ? 'Nothing to review'
+                  : status === 'picked'
+                    ? 'No picked ideas yet'
+                    : 'Nothing skipped'}
+              </h2>
+              <p>
+                {status === 'new'
+                  ? 'New ideas arrive after each radar run, usually every few hours. Each one is a story matched to your topics.'
+                  : status === 'picked'
+                    ? 'Ideas you pick are saved here, ready to copy when you sit down to make something.'
+                    : 'Skipped ideas wait here in case you change your mind.'}
+              </p>
+            </div>
+          ) : (
+            <ol className="items">
+              {items.map((item, i) => (
+                <QueueRow
+                  key={item.id}
+                  item={item}
+                  now={now}
+                  hint={hint && status === 'new' && i === 0}
+                  onDismissHint={dismissHint}
+                  selected={item.id === selected}
+                  onSelect={() => dispatch({ type: 'select', id: item.id })}
+                  onDecide={(to) => void decide(item, to)}
+                />
+              ))}
+            </ol>
+          ))}
+
+        {nextCursor && (load === 'ready' || load === 'more') && (
+          <div className="more">
+            <button
+              type="button"
+              className="btn"
+              disabled={load === 'more'}
+              onClick={() => void loadPage(nextCursor, true, { stale: false })}
+            >
+              {load === 'more' ? 'Loading' : 'Load more'}
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="toast-region" role="status" aria-live="polite">
         {toast && (
@@ -261,73 +290,5 @@ export function Queue() {
         )}
       </div>
     </section>
-  );
-}
-
-function QueueRow({
-  item,
-  selected,
-  onSelect,
-  onDecide,
-}: {
-  item: QueueItem;
-  selected: boolean;
-  onSelect: () => void;
-  onDecide: (to: QueueStatus) => void;
-}) {
-  const ref = useRef<HTMLLIElement>(null);
-  useEffect(() => {
-    if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
-  }, [selected]);
-
-  const meta = [item.source, item.niche, item.format].filter(Boolean).join(' · ');
-
-  return (
-    <li
-      ref={ref}
-      className="qrow"
-      aria-current={selected ? 'true' : undefined}
-      onFocusCapture={onSelect}
-    >
-      <span className="rank" title="Score">
-        {Math.round(item.score)}
-      </span>
-      <div className="item-body">
-        <h3 className="item-title">
-          <a href={item.url} rel="noopener" target="_blank">
-            {item.title}
-          </a>
-        </h3>
-        <p className="meta">{meta}</p>
-        {item.hook && <p className="q-hook">{item.hook}</p>}
-        {item.angle && <p className="q-angle">{item.angle}</p>}
-        {item.titleDraft && (
-          <p className="q-draft">
-            <span className="meta">Title draft</span> {item.titleDraft}
-          </p>
-        )}
-        <div className="q-actions">
-          {item.status !== 'picked' && (
-            <button
-              type="button"
-              className={item.status === 'new' ? 'btn btn-solid' : 'btn'}
-              onClick={() => onDecide('picked')}
-            >
-              Pick
-            </button>
-          )}
-          {item.status !== 'skipped' && (
-            <button type="button" className="btn" onClick={() => onDecide('skipped')}>
-              Skip
-            </button>
-          )}
-          {item.status !== 'new' && (
-            <button type="button" className="btn btn-quiet" onClick={() => onDecide('new')}>
-              Back to New
-            </button>
-          )}
-        </div>
-      </div>
-    </li>
   );
 }

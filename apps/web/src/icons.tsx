@@ -60,3 +60,9 @@ export const RadarMark = () => (
     <circle cx="4" cy="20" r="2" fill="currentColor" />
   </svg>
 );
+
+export const ChevronIcon = () => (
+  <svg {...base} width={12} height={12} strokeWidth={2}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);

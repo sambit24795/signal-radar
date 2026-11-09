@@ -4,7 +4,7 @@ import {
   PREFS_KEY,
   emptyPrefs,
   loadPrefs,
-  resetPrefs,
+  startOver,
   resolvePrefs,
   savePrefs,
   type PrefsStorage,
@@ -21,7 +21,7 @@ const memory = (initial: Record<string, string> = {}) => {
 };
 
 const defaults: Defaults = {
-  niches: [{ id: 'ai', name: 'AI', weight: 1, keywords: ['claude'] }],
+  niches: [],
   sources: [
     { id: 'hn', name: 'Hacker News', type: 'hn' },
     { id: 'reddit', name: 'Reddit', type: 'reddit' },
@@ -80,26 +80,45 @@ describe('prefs storage', () => {
     expect(savePrefs(storage, emptyPrefs())).toBe(false);
   });
 
-  it('reset clears niches and sources but keeps the theme', () => {
+  it('start over clears topics and the show-everything choice, keeps sources and theme', () => {
     const { storage } = memory();
     savePrefs(storage, {
       ...emptyPrefs(),
       niches: [custom],
+      showAll: true,
       disabledSources: ['hn'],
       theme: 'light',
     });
-    expect(resetPrefs(storage)).toEqual({ ...emptyPrefs(), theme: 'light' });
-    expect(loadPrefs(storage)).toEqual({ ...emptyPrefs(), theme: 'light' });
+    const next = { ...emptyPrefs(), disabledSources: ['hn'], theme: 'light' };
+    expect(startOver(storage)).toEqual(next);
+    expect(loadPrefs(storage)).toEqual(next);
+  });
+
+  it('round-trips the show-everything choice', () => {
+    const { storage } = memory();
+    savePrefs(storage, { ...emptyPrefs(), showAll: true });
+    expect(loadPrefs(storage).showAll).toBe(true);
   });
 });
 
 describe('resolvePrefs', () => {
-  it('uses the API defaults when nothing is customized', () => {
+  it('has no topics of its own to offer: nothing chosen means ask', () => {
     expect(resolvePrefs(emptyPrefs(), defaults)).toEqual({
-      niches: defaults.niches,
+      niches: [],
       sources: defaults.sources,
       theme: 'system',
+      needsTopics: true,
     });
+  });
+
+  it('does not ask again after "skip, show everything"', () => {
+    const out = resolvePrefs({ ...emptyPrefs(), showAll: true }, defaults);
+    expect(out.niches).toEqual([]);
+    expect(out.needsTopics).toBe(false);
+  });
+
+  it('never needs to ask once the user has topics', () => {
+    expect(resolvePrefs({ ...emptyPrefs(), niches: [custom] }, defaults).needsTopics).toBe(false);
   });
 
   it('applies custom niches and disabled sources over the defaults', () => {

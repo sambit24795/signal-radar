@@ -7,7 +7,8 @@ import type { Defaults } from '../lib/feed';
 import { refreshMe, type Me } from '../lib/me';
 import { planSummary } from '../lib/plan';
 import { Link } from './Link';
-import { NichesEditor, SourcesEditor } from './Editors';
+import { SourcesEditor } from './Editors';
+import { TopicPicker } from './TopicPicker';
 import { FeedAdder, FeedList } from './Feeds';
 import { MAX_CUSTOM_FEEDS } from '../lib/feeds';
 import { Notifications } from './Notifications';
@@ -49,9 +50,7 @@ function SettingsForm({
 }) {
   const isPro = me.subscription.isPro;
   const allIds = defaults.sources.map((s) => s.id);
-  const [niches, setNiches] = useState<Niche[]>(() =>
-    config.niches.length > 0 ? config.niches : defaults.niches,
-  );
+  const [niches, setNiches] = useState<Niche[]>(() => config.niches);
   const [enabled, setEnabled] = useState(
     () => new Set(config.sources.length > 0 ? config.sources : allIds),
   );
@@ -117,10 +116,12 @@ function SettingsForm({
     <form onSubmit={submit} className="settings-form">
       <section className="settings-sec" aria-labelledby="set-niches">
         <h3 id="set-niches" className="sheet-h">
-          Niches
+          Topics
         </h3>
-        <p className="hint">Items are ranked by how well they match these keywords.</p>
-        <NichesEditor
+        <p className="hint">
+          Stories are ranked by how well they match the words behind each topic.
+        </p>
+        <TopicPicker
           niches={niches}
           onChange={(n) => {
             setNiches(n);
@@ -153,7 +154,7 @@ function SettingsForm({
         {isPro ? (
           <>
             <p className="hint">
-              RSS or Atom feeds you follow, ranked against your niches in your queue. Up to{' '}
+              RSS or Atom feeds you follow, ranked against your topics in your queue. Up to{' '}
               {MAX_CUSTOM_FEEDS}.
             </p>
             <FeedList
@@ -174,7 +175,7 @@ function SettingsForm({
         ) : (
           <>
             <p className="hint">
-              Bring your own RSS or Atom feeds, so niches like space or personal finance have
+              Bring your own RSS or Atom feeds, so topics like space or personal finance have
               something to rank. This is part of Pro.
             </p>
             {config.customFeeds.length > 0 && (

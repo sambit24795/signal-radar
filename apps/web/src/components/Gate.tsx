@@ -64,7 +64,7 @@ export function Gate({ me, feature }: Props) {
   if (me.status === 'anon') {
     return (
       <div className="state">
-        <h2 className="state-title">The Make queue is a Pro feature</h2>
+        <h2 className="state-title">Ideas is a Pro feature</h2>
         <p>
           It takes the best of each radar run, adds a hook and an angle for each item, and learns
           from what you pick and skip. The first 7 days are free.
@@ -84,7 +84,7 @@ export function Gate({ me, feature }: Props) {
   return (
     <div className="state">
       <h2 className="state-title">The queue needs Pro</h2>
-      <p>Your account is on the Free plan, so the Make queue is switched off.</p>
+      <p>Your account is on the Free plan, so Ideas is switched off.</p>
       <div className="auth-actions">
         <Link to="pricing" className="btn btn-solid">
           See Pro

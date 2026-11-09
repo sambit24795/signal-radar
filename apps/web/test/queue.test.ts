@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { initialQueue, queueReducer, type QueueItem, type QueueState } from '../src/lib/queue';
+import {
+  copyText,
+  effortLabel,
+  hintSeen,
+  initialQueue,
+  markHintSeen,
+  queueMeta,
+  queueReducer,
+  type QueueItem,
+  type QueueState,
+} from '../src/lib/queue';
 
 const item = (id: string): QueueItem => ({
   id,
@@ -87,5 +97,41 @@ describe('queueReducer', () => {
   it('only selects ids that are in the list', () => {
     const s = load(['a']);
     expect(queueReducer(s, { type: 'select', id: 'nope' })).toBe(s);
+  });
+});
+
+describe('queue item text', () => {
+  const now = Date.parse('2026-01-01T03:00:00Z');
+
+  it('builds the meta line from what is there and skips the rest', () => {
+    const full = { ...item('a'), niche: 'AI tools', effort: 'S' as const };
+    expect(queueMeta(full, now)).toEqual(['Hacker News', 'AI tools', '3 h ago', 'small effort']);
+    expect(queueMeta(item('b'), now)).toEqual(['Hacker News', '3 h ago']);
+  });
+
+  it('turns effort letters into words', () => {
+    expect(effortLabel('L')).toBe('large effort');
+    expect(effortLabel(null)).toBe('');
+    expect(effortLabel(undefined)).toBe('');
+  });
+
+  it('copies the hook, else the title draft, else the title', () => {
+    expect(copyText({ ...item('a'), hook: 'A hook', titleDraft: 'Draft' })).toEqual({
+      label: 'Copy hook',
+      text: 'A hook',
+    });
+    expect(copyText({ ...item('a'), titleDraft: 'Draft' }).text).toBe('Draft');
+    expect(copyText(item('a'))).toEqual({ label: 'Copy title', text: 'a' });
+  });
+
+  it('remembers that the first-item hint was seen', () => {
+    const data = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+    expect(hintSeen(storage)).toBe(false);
+    markHintSeen(storage);
+    expect(hintSeen(storage)).toBe(true);
   });
 });

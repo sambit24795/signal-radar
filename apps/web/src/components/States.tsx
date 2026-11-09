@@ -1,29 +1,31 @@
 interface EmptyProps {
-  filtered: boolean;
+  topic: boolean;
+  source: boolean;
   onCustomize: () => void;
   onClearFilter: () => void;
 }
 
-export function EmptyState({ filtered, onCustomize, onClearFilter }: EmptyProps) {
+export function EmptyState({ topic, source, onCustomize, onClearFilter }: EmptyProps) {
+  const filtered = topic || source;
   return (
     <div className="state">
-      <h2 className="state-title">Nothing matches here</h2>
+      <h2 className="state-title">Nothing here yet</h2>
       <p>
-        {filtered
-          ? 'No items in this view match that niche.'
-          : 'No items in this view match your niches.'}{' '}
-        {filtered ? (
+        {topic
+          ? 'No stories in the feed match this topic right now.'
+          : source
+            ? 'No stories from this source right now.'
+            : 'No stories match your topics right now.'}{' '}
+        {filtered && (
           <>
             <button type="button" className="link" onClick={onClearFilter}>
-              Show all niches
+              Show all stories
             </button>{' '}
             or{' '}
           </>
-        ) : (
-          'Try another tab, or '
         )}
         <button type="button" className="link" onClick={onCustomize}>
-          edit your niches
+          change your topics
         </button>
         .
       </p>

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { ScoredItem } from '@radar/core/ranking';
 import { matchedKeywords } from '../src/lib/keywords';
-import { metaParts, nicheLabel, selectView, visibleTabs } from '../src/lib/view';
+import {
+  ALL_TOPICS,
+  metaParts,
+  nicheLabel,
+  selectView,
+  topicTabs,
+  visibleSourceFilters,
+} from '../src/lib/view';
 
 const item = (over: Partial<ScoredItem>): ScoredItem => ({
   id: 'a',
@@ -27,16 +34,30 @@ describe('selectView', () => {
     item({ id: '3', sourceKind: 'reddit', niches: ['ai', 'dev'] }),
   ];
 
-  it('keeps order, filters by tab and niche, and limits', () => {
-    expect(selectView(ranked, 'top', null).map((i) => i.id)).toEqual(['1', '2', '3']);
-    expect(selectView(ranked, 'github', null).map((i) => i.id)).toEqual(['2']);
-    expect(selectView(ranked, 'top', 'dev').map((i) => i.id)).toEqual(['2', '3']);
-    expect(selectView(ranked, 'top', null, 2)).toHaveLength(2);
+  it('keeps order, filters by topic and source, and limits', () => {
+    expect(selectView(ranked, null).map((i) => i.id)).toEqual(['1', '2', '3']);
+    expect(selectView(ranked, null, 'github').map((i) => i.id)).toEqual(['2']);
+    expect(selectView(ranked, 'dev').map((i) => i.id)).toEqual(['2', '3']);
+    expect(selectView(ranked, 'dev', 'reddit').map((i) => i.id)).toEqual(['3']);
+    expect(selectView(ranked, null, 'all', 2)).toHaveLength(2);
   });
 
-  it('shows tabs only for enabled source types', () => {
-    const tabs = visibleTabs([{ id: 'hn', name: 'Hacker News', type: 'hn' }]);
-    expect(tabs.map((t) => t.id)).toEqual(['top', 'hn']);
+  it('offers source filters only for enabled source types', () => {
+    const f = visibleSourceFilters([{ id: 'hn', name: 'Hacker News', type: 'hn' }]);
+    expect(f.map((t) => t.id)).toEqual(['all', 'hn']);
+  });
+
+  it('makes one tab per topic after "All"', () => {
+    const niches = [
+      { id: 'ai', name: 'AI tools, coding with AI', weight: 1, keywords: ['x'] },
+      { id: 'go', name: 'Go', weight: 1, keywords: ['y'] },
+    ];
+    expect(topicTabs(niches)).toEqual([
+      { id: ALL_TOPICS, label: 'All' },
+      { id: 'ai', label: 'AI tools' },
+      { id: 'go', label: 'Go' },
+    ]);
+    expect(topicTabs([])).toEqual([{ id: ALL_TOPICS, label: 'All' }]);
   });
 
   it('shortens niche names', () => {

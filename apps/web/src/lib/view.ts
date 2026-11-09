@@ -101,6 +101,6 @@ export function metaParts(item: ScoredItem, now: number = Date.now()): string[] 
   if (m.comments !== undefined) parts.push(`${compact(m.comments)} comments`);
   if (item.media.type === 'video' || item.media.type === 'short') parts.push('video');
   if (m.perHour >= 0.5) parts.push(`${compact(m.perHour)}/h`);
-  parts.push(`score ${Math.round(item.score)}`);
+  if (item.score > 0) parts.push(`score ${Math.round(item.score)}`);
   return parts;
 }

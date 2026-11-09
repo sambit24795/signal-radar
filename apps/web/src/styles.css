@@ -1887,3 +1887,77 @@ kbd {
 .addlink-note.warn {
   color: var(--crimson);
 }
+
+/* ---------- search: a line to type on, not a box ---------- */
+
+.find {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+  transition: border-color 120ms ease-out;
+}
+.find:hover {
+  border-bottom-color: var(--text-3);
+}
+.find:focus-within {
+  border-bottom-color: var(--text);
+  color: var(--text-2);
+}
+.find-icon {
+  display: inline-flex;
+  flex: none;
+}
+.find-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font: 400 19px/1.3 var(--serif);
+  appearance: none;
+}
+.find-input::placeholder {
+  color: var(--text-3);
+  opacity: 1;
+}
+.find-input:focus,
+.find-input:focus-visible {
+  outline: none;
+}
+.find-input::-webkit-search-cancel-button {
+  display: none;
+}
+.find-clear {
+  flex: none;
+  font-size: 13px;
+}
+.find-key {
+  display: none;
+  flex: none;
+  font: 400 12px/1 var(--mono);
+  color: var(--text-3);
+}
+@media (hover: hover) and (pointer: fine) {
+  .find-key {
+    display: inline;
+  }
+}
+.find-status {
+  margin: 10px 0 4px;
+  font-size: 14px;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+.find-status .link-quiet {
+  min-height: 32px;
+}
+.find-warn {
+  margin-top: 0;
+  color: var(--text-3);
+}

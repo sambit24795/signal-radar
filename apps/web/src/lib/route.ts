@@ -61,3 +61,8 @@ export function useRoute(): Route {
     return parseRoute(path, query ? `?${query}` : '');
   }, [where]);
 }
+
+/** The current `?query` string (with the leading `?`, or empty); re-renders when the URL changes. */
+export function useSearchString(): string {
+  return useSyncExternalStore(subscribe, () => location.search);
+}

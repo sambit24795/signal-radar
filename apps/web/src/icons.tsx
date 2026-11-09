@@ -66,3 +66,10 @@ export const ChevronIcon = () => (
     <path d="m6 9 6 6 6-6" />
   </svg>
 );
+
+export const SearchIcon = () => (
+  <svg {...base} width={16} height={16} strokeWidth={1.6}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m16 16 4.5 4.5" />
+  </svg>
+);

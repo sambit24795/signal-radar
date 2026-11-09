@@ -176,7 +176,7 @@ export function Queue() {
       </div>
       <p className="lede queue-lede">
         Stories picked for your topics after each run. Pick the ones worth making something about
-        and skip the rest. Picked ideas are kept on the Picked tab.
+        and skip the rest. Your picks and skips shape what the next run suggests.
       </p>
       <Tabs
         tabs={STATUSES.map((s) => ({ id: s, label: STATUS_LABEL[s] }))}

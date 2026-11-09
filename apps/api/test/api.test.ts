@@ -130,7 +130,9 @@ describe.skipIf(!dbAvailable)('api', () => {
         telegramChatId: '123',
       });
       expect(got.config.niches[0]).toMatchObject({ id: 'ai', weight: 1 });
-      expect(got.config.notion).toEqual({ token: 'secret_x', dbId: 'db1' });
+      expect(got.config.notion).toEqual({ dbId: 'db1', hasToken: true });
+      expect(JSON.stringify(got)).not.toContain('secret_x');
+      expect(JSON.stringify(await put.json())).not.toContain('secret_x');
 
       const bad = await call(ctx.app, '/api/me/config', {
         method: 'PUT',
@@ -139,6 +141,39 @@ describe.skipIf(!dbAvailable)('api', () => {
       });
       expect(bad.status).toBe(400);
       expect(((await bad.json()) as Json).error).toContain('topN');
+    });
+
+    it('keeps the stored Notion token when none is sent, and requires one the first time', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const base = { niches: [], sources: [], topN: 5, telegramChatId: null };
+      const first = await call(ctx.app, '/api/me/config', {
+        method: 'PUT',
+        user: u,
+        json: { ...base, notion: { dbId: 'db1' } },
+      });
+      expect(first.status).toBe(400);
+      await call(ctx.app, '/api/me/config', {
+        method: 'PUT',
+        user: u,
+        json: { ...base, notion: { token: 'secret_x', dbId: 'db1' } },
+      });
+      const again = await call(ctx.app, '/api/me/config', {
+        method: 'PUT',
+        user: u,
+        json: { ...base, notion: { dbId: 'db2' } },
+      });
+      expect(((await again.json()) as Json).config.notion).toEqual({ dbId: 'db2', hasToken: true });
+      const [row] = await ctx.db
+        .select()
+        .from(schema.userConfig)
+        .where(eq(schema.userConfig.userId, u.id));
+      expect(row?.notion).toEqual({ token: 'secret_x', dbId: 'db2' });
+      const cleared = await call(ctx.app, '/api/me/config', {
+        method: 'PUT',
+        user: u,
+        json: { ...base, notion: null },
+      });
+      expect(((await cleared.json()) as Json).config.notion).toBeNull();
     });
 
     it('rejects non-JSON bodies with 400', async () => {

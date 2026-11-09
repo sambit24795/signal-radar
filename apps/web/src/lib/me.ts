@@ -13,6 +13,10 @@ export interface Subscription {
 export interface Me {
   user: { id: string; name: string; email: string };
   subscription: Subscription;
+  /** A Telegram chat is linked for digests. */
+  telegramConnected: boolean;
+  /** The server has a Telegram bot configured. */
+  telegramAvailable: boolean;
 }
 
 export type MeState =

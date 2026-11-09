@@ -10,6 +10,7 @@ import { Link } from './Link';
 import { NichesEditor, SourcesEditor } from './Editors';
 import { FeedAdder, FeedList } from './Feeds';
 import { MAX_CUSTOM_FEEDS } from '../lib/feeds';
+import { Notifications } from './Notifications';
 
 interface Props {
   me: Me;
@@ -24,7 +25,7 @@ export function Settings({ me, defaults }: Props) {
         Settings
       </h2>
       {config && defaults ? (
-        <SettingsForm config={config} defaults={defaults} isPro={me.subscription.isPro} />
+        <SettingsForm config={config} defaults={defaults} me={me} />
       ) : (
         <p className="meta" aria-busy="true">
           Loading your settings
@@ -40,12 +41,13 @@ type TokenMode = 'keep' | 'replace' | 'removed';
 function SettingsForm({
   config,
   defaults,
-  isPro,
+  me,
 }: {
   config: ServerConfig;
   defaults: Defaults;
-  isPro: boolean;
+  me: Me;
 }) {
+  const isPro = me.subscription.isPro;
   const allIds = defaults.sources.map((s) => s.id);
   const [niches, setNiches] = useState<Niche[]>(() =>
     config.niches.length > 0 ? config.niches : defaults.niches,
@@ -54,7 +56,6 @@ function SettingsForm({
     () => new Set(config.sources.length > 0 ? config.sources : allIds),
   );
   const [feeds, setFeeds] = useState<DraftFeed[]>(() => config.customFeeds);
-  const [telegram, setTelegram] = useState(config.telegramChatId ?? '');
   const [dbId, setDbId] = useState(config.notion?.dbId ?? '');
   const [token, setToken] = useState('');
   const [tokenMode, setTokenMode] = useState<TokenMode>(
@@ -96,7 +97,6 @@ function SettingsForm({
           customFeeds: feeds,
           niches,
           sources: allIds.filter((id) => enabled.has(id)),
-          telegramChatId: telegram.trim() || null,
           notion,
         },
         newToken,
@@ -191,26 +191,7 @@ function SettingsForm({
         )}
       </section>
 
-      <section className="settings-sec" aria-labelledby="set-telegram">
-        <h3 id="set-telegram" className="sheet-h">
-          Telegram digest
-        </h3>
-        <p className="hint">The chat that receives your daily digest.</p>
-        <label className="field">
-          <span className="field-label">Chat id</span>
-          <input
-            value={telegram}
-            onChange={(e) => {
-              setTelegram(e.target.value);
-              touch();
-            }}
-            inputMode="numeric"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="123456789"
-          />
-        </label>
-      </section>
+      <Notifications me={me} />
 
       <section className="settings-sec" aria-labelledby="set-notion">
         <h3 id="set-notion" className="sheet-h">

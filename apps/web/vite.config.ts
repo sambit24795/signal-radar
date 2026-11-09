@@ -33,13 +33,15 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          importScripts: ['push-sw.js'],
           globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             {
               // Session, account, queue and billing data is per user and must never come from a cache.
-              urlPattern: ({ url }) => /^\/api\/(me|queue|auth|billing)(\/|$)/.test(url.pathname),
+              urlPattern: ({ url }) =>
+                /^\/api\/(me|queue|auth|billing|push|telegram)(\/|$)/.test(url.pathname),
               handler: 'NetworkOnly',
             },
             {

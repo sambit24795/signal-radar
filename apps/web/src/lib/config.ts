@@ -54,8 +54,9 @@ export function clearConfig(): void {
 }
 
 /**
- * The body PUT /api/me/config expects. A stored Notion token is kept by omitting it, and stored
- * custom feeds are kept unless `withFeeds` (quick edits must not trip the Pro-only feed check).
+ * The body PUT /api/me/config expects. The Telegram chat id is never sent (the connect flow owns it),
+ * a stored Notion token is kept by omitting it, and stored custom feeds are kept unless `withFeeds`
+ * (quick edits must not trip the Pro-only feed check).
  */
 export function toBody(
   cfg: ConfigDraft,
@@ -75,7 +76,6 @@ export function toBody(
           })),
         }
       : {}),
-    telegramChatId: cfg.telegramChatId,
     notion: cfg.notion
       ? notionToken
         ? { token: notionToken, dbId: cfg.notion.dbId }

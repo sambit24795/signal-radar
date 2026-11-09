@@ -289,7 +289,14 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
             </button>
           </div>
           <p className="hint">
-            {isPro ? 'Your queue fills on the next radar run.' : 'You will land on the Read view.'}
+            {isPro ? (
+              <>
+                Your queue fills on the next radar run. Push and Telegram alerts are in Settings,
+                under Notifications.
+              </>
+            ) : (
+              'You will land on the Read view.'
+            )}
           </p>
         </>
       )}

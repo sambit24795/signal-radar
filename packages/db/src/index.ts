@@ -6,7 +6,7 @@ import * as schema from './schema.js';
 
 export { schema };
 export * from './schema.js';
-export { createPgStore } from './store.js';
+export { createPgStore, grantPass, type PassGrant } from './store.js';
 
 export type Db = PostgresJsDatabase<typeof schema> & { $client: postgres.Sql };
 
@@ -43,3 +43,5 @@ export type QueueItemRow = typeof schema.queueItem.$inferSelect;
 export type NewQueueItemRow = typeof schema.queueItem.$inferInsert;
 export type SeenRow = typeof schema.seen.$inferSelect;
 export type PushSubscriptionRow = typeof schema.pushSubscription.$inferSelect;
+export type PassPurchaseRow = typeof schema.passPurchase.$inferSelect;
+export type NewPassPurchaseRow = typeof schema.passPurchase.$inferInsert;

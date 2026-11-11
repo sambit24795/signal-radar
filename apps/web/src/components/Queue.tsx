@@ -35,9 +35,13 @@ export function Queue({ isPro }: { isPro: boolean }) {
   const [load, setLoad] = useState<Load>('loading');
   const [error, setError] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
+  const [keys, setKeys] = useState(false); // current row is only marked while the keyboard drives
   const [hint, setHint] = useState(() => !hintSeen(localStorage));
   const [link, setLink] = useState('');
   const [adding, setAdding] = useState(false);
+  // Shown when the page could not be read (paywall, login, script-built page): the reader names it.
+  const [askTitle, setAskTitle] = useState(false);
+  const [linkTitle, setLinkTitle] = useState('');
   const [addNote, setAddNote] = useState<{ kind: 'done' | 'error'; text: string } | null>(null);
   const now = useNow();
   const toastId = useRef(0);
@@ -156,10 +160,16 @@ export function Queue({ isPro }: { isPro: boolean }) {
         default:
           return;
       }
+      setKeys(true);
       e.preventDefault();
     };
+    const onPointer = () => setKeys(false);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onPointer);
+    };
   }, [decide, undo, toast, status]);
 
   const addLink = async (e: FormEvent) => {
@@ -175,23 +185,39 @@ export function Queue({ isPro }: { isPro: boolean }) {
     }
     setAdding(true);
     setAddNote(null);
-    setStatus('picked');
     try {
-      const { item, existed } = await addToIdeas({ url });
-      dispatch({ type: 'prepend', item });
+      const title = askTitle ? linkTitle.trim() : '';
+      const { item, existed } = await addToIdeas(title ? { url, title } : { url });
+      // New links land in New. A duplicate stays where it was (a skipped one comes back to New).
+      if (item.status === status) dispatch({ type: 'prepend', item });
+      else setStatus(item.status);
       setLink('');
+      setLinkTitle('');
+      setAskTitle(false);
       setAddNote({
         kind: 'done',
-        text: existed
-          ? 'Already in your ideas. It is at the top of Picked.'
-          : 'Added to the top of Picked.',
+        text: !existed
+          ? 'Added to New. Pick it when you are ready.'
+          : `Already in your ideas, in ${STATUS_LABEL[item.status]}.`,
       });
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 402)) void refreshMe();
-      setAddNote({
-        kind: 'error',
-        text: err instanceof Error ? err.message : 'Could not add that link.',
-      });
+      const unreadable =
+        err instanceof ApiError &&
+        err.status === 400 &&
+        /^Could not (read|find a title)/.test(err.message);
+      if (unreadable) {
+        setAskTitle(true);
+        setAddNote({
+          kind: 'error',
+          text: 'Could not read a title from that page. Type one and add it again.',
+        });
+      } else {
+        setAddNote({
+          kind: 'error',
+          text: err instanceof Error ? err.message : 'Could not add that link.',
+        });
+      }
     } finally {
       setAdding(false);
     }
@@ -237,19 +263,44 @@ export function Queue({ isPro }: { isPro: boolean }) {
             aria-describedby="addlink-note"
             onChange={(e) => {
               setLink(e.target.value);
+              setAskTitle(false);
               if (addNote?.kind === 'error') setAddNote(null);
             }}
           />
-          <button type="submit" className="btn" disabled={adding || !link.trim()}>
+          <button
+            type="submit"
+            className="btn"
+            disabled={adding || !link.trim() || (askTitle && !linkTitle.trim())}
+          >
             {adding ? 'Adding' : 'Add'}
           </button>
         </div>
+        {askTitle && (
+          <div className="field-row addlink-title">
+            <label className="sr-only" htmlFor="addlink-title">
+              Title
+            </label>
+            <input
+              id="addlink-title"
+              type="text"
+              autoComplete="off"
+              placeholder="Title"
+              maxLength={300}
+              value={linkTitle}
+              disabled={adding}
+              autoFocus
+              onChange={(e) => setLinkTitle(e.target.value)}
+            />
+          </div>
+        )}
         <p
           id="addlink-note"
           className={addNote?.kind === 'error' ? 'addlink-note warn' : 'addlink-note'}
           role={addNote?.kind === 'error' ? 'alert' : 'status'}
         >
-          {adding ? 'Reading the page\u2026' : (addNote?.text ?? '')}
+          {adding
+            ? 'Reading the page\u2026'
+            : (addNote?.text ?? 'Any public article, repo, thread or video.')}
         </p>
       </form>
       <Tabs
@@ -333,7 +384,7 @@ export function Queue({ isPro }: { isPro: boolean }) {
               </p>
             </div>
           ) : (
-            <ol className="items">
+            <ol className="items" data-keys={keys ? 'true' : undefined}>
               {items.map((item, i) => (
                 <QueueRow
                   key={item.id}
@@ -345,6 +396,7 @@ export function Queue({ isPro }: { isPro: boolean }) {
                   selected={item.id === selected}
                   onSelect={() => dispatch({ type: 'select', id: item.id })}
                   onDecide={(to) => void decide(item, to)}
+                  onUpdate={(next) => dispatch({ type: 'update', item: next })}
                 />
               ))}
             </ol>

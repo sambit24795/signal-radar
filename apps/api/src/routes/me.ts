@@ -7,6 +7,7 @@ import {
   assertPublicUrlSyntax,
   customFeedId,
   fetchPublicText,
+  CreatorProfileSchema,
   NicheSchema,
   parseFeed,
   parseFeedTitle,
@@ -44,6 +45,8 @@ const ConfigBody = z.object({
   niches: z.array(NicheSchema).max(20),
   sources: z.array(z.string().min(1)).max(100),
   topN: z.number().int().min(1).max(50),
+  /** What they make and for whom. Omitted keeps the stored profile; null clears it. */
+  creator: CreatorProfileSchema.nullable().optional(),
   /** Pro only. Omitted keeps the stored feeds. */
   customFeeds: z
     .array(CustomFeedSchema)
@@ -87,8 +90,15 @@ export function meRoutes(deps: RouteDeps) {
       .select({ telegramChatId: schema.userConfig.telegramChatId })
       .from(schema.userConfig)
       .where(eq(schema.userConfig.userId, u.id));
+    const proUntil =
+      sub && isPro(sub)
+        ? sub.status === 'trialing'
+          ? sub.trialEndsAt
+          : sub.currentPeriodEnd
+        : null;
     return c.json({
       user: { id: u.id, name: u.name, email: u.email },
+      proUntil,
       telegramConnected: Boolean(cfg?.telegramChatId),
       telegramAvailable: telegramAvailable(deps.env),
       subscription: sub

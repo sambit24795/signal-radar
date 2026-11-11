@@ -1,22 +1,30 @@
-import { useState, type FormEvent } from 'react';
-import type { Niche } from '@radar/core/ranking';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  topicSourceKey,
+  topicSourceLabel,
+  topicSourcesOf,
+  withoutTopicSource,
+  type Niche,
+} from '@radar/core/ranking';
 import { keywordText, newNicheId, parseKeywords } from '../lib/niches';
 import { togglePreset } from '../lib/onboarding';
 import { MAX_NICHES, PRESETS } from '../lib/presets';
-import { PlusIcon } from '../icons';
+import { CheckIcon, CloseIcon, PencilIcon, PlusIcon } from '../icons';
 
 const PRESET_IDS = new Set(PRESETS.map((p) => p.id));
 
 interface Props {
   niches: Niche[];
   onChange: (niches: Niche[]) => void;
+  /** A topic to open for editing, e.g. the one just added from search. */
+  openId?: string;
 }
 
 /**
  * Topics as the user chose them: the picked ones first (each with its keywords on demand), then the
  * rest of the library as plain "+ Topic" words to add, then "add your own".
  */
-export function TopicPicker({ niches, onChange }: Props) {
+export function TopicPicker({ niches, onChange, openId }: Props) {
   const full = niches.length >= MAX_NICHES;
   const left = PRESETS.filter((p) => !niches.some((n) => n.id === p.id));
 
@@ -28,6 +36,7 @@ export function TopicPicker({ niches, onChange }: Props) {
             <TopicRow
               key={n.id}
               niche={n}
+              startOpen={n.id === openId}
               onChange={(next) => onChange(niches.map((x) => (x.id === n.id ? next : x)))}
               onRemove={() => onChange(niches.filter((x) => x.id !== n.id))}
             />
@@ -67,18 +76,25 @@ export function TopicPicker({ niches, onChange }: Props) {
 /** One chosen topic: its keywords at a glance, editable on demand. */
 function TopicRow({
   niche,
+  startOpen,
   onChange,
   onRemove,
 }: {
   niche: Niche;
+  startOpen: boolean;
   onChange: (n: Niche) => void;
   onRemove: () => void;
 }) {
   const custom = !PRESET_IDS.has(niche.id);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
+  const row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (startOpen) row.current?.scrollIntoView({ block: 'center' });
+  }, [startOpen]);
   const [name, setName] = useState(niche.name);
   const [words, setWords] = useState(() => keywordText(niche));
   const kws = parseKeywords(words, niche.keywords);
+  const shownSources = topicSourcesOf(niche).filter((s) => s.type !== 'news');
   const valid = name.trim().length > 0 && kws.length > 0;
 
   const commit = (nextName: string, nextWords: string) => {
@@ -87,29 +103,53 @@ function TopicRow({
   };
 
   return (
-    <li className="topic-row">
+    <li className="topic-row" ref={row}>
       <div className="topic-line">
-        <span className="picked-name">{niche.name}</span>
+        <div className="topic-main">
+          <span className="picked-name">{niche.name}</span>
+          {!open && <p className="meta picked-kw">{keywordText(niche)}</p>}
+        </div>
         <span className="topic-actions">
           <button
             type="button"
-            className="link-quiet"
+            className="icon-btn icon-btn-sm"
             aria-expanded={open}
+            aria-label={open ? `Done editing ${niche.name}` : `Edit keywords for ${niche.name}`}
             onClick={() => setOpen(!open)}
           >
-            {open ? 'Done' : 'Edit keywords'}
+            {open ? <CheckIcon /> : <PencilIcon />}
           </button>
           <button
             type="button"
-            className="link-quiet"
+            className="icon-btn icon-btn-sm"
             aria-label={`Remove ${niche.name}`}
             onClick={onRemove}
           >
-            Remove
+            <CloseIcon />
           </button>
         </span>
       </div>
-      {!open && <p className="meta picked-kw">{keywordText(niche)}</p>}
+      {/* The Google News search is automatic, so only sources the user added are listed. */}
+      {shownSources.length > 0 && (
+        <ul className="topic-sources" aria-label={`Sources for ${niche.name}`}>
+          {shownSources.map((src) => {
+            const label = topicSourceLabel(src);
+            return (
+              <li key={topicSourceKey(src)}>
+                <span>{label}</span>
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-sm"
+                  aria-label={`Remove ${label}`}
+                  onClick={() => onChange(withoutTopicSource(niche, topicSourceKey(src)))}
+                >
+                  <CloseIcon />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {open && (
         <div className="picked-edit">
           {custom && (
@@ -154,7 +194,7 @@ function AddOwn({ onAdd }: { onAdd: (n: Omit<Niche, 'id'>) => void }) {
 
   if (!open) {
     return (
-      <button type="button" className="btn btn-quiet add-own" onClick={() => setOpen(true)}>
+      <button type="button" className="topic-add-btn add-own" onClick={() => setOpen(true)}>
         <PlusIcon /> Add your own topic
       </button>
     );
@@ -195,7 +235,7 @@ function AddOwn({ onAdd }: { onAdd: (n: Omit<Niche, 'id'>) => void }) {
         <button type="submit" className="btn" disabled={!name.trim() || kws.length === 0}>
           Add topic
         </button>
-        <button type="button" className="link" onClick={() => setOpen(false)}>
+        <button type="button" className="text-btn" onClick={() => setOpen(false)}>
           Cancel
         </button>
       </div>

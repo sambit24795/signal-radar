@@ -10,7 +10,11 @@ export function createAuth(db: Db, env: ApiEnv) {
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    trustedOrigins: [env.WEB_ORIGIN],
+    // Dev only: allow Cloudflare quick tunnels (vite allows them too) for testing on a phone.
+    trustedOrigins:
+      env.NODE_ENV === 'production'
+        ? [env.WEB_ORIGIN]
+        : [env.WEB_ORIGIN, 'https://*.trycloudflare.com'],
     database: drizzleAdapter(db, { provider: 'pg', schema }),
     emailAndPassword: { enabled: true },
     databaseHooks: {

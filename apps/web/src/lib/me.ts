@@ -13,6 +13,8 @@ export interface Subscription {
 export interface Me {
   user: { id: string; name: string; email: string };
   subscription: Subscription;
+  /** ISO date Pro runs to; set during the trial and after a pass. Null on Free. */
+  proUntil: string | null;
   /** A Telegram chat is linked for digests. */
   telegramConnected: boolean;
   /** The server has a Telegram bot configured. */

@@ -16,6 +16,8 @@ interface Props {
   onStartOver: () => void;
   /** Signed in and the last background save to the account failed. */
   syncError?: boolean;
+  /** Opens this topic for editing (the one just added from search). */
+  focusTopicId?: string;
 }
 
 export function CustomizeSheet({
@@ -28,6 +30,7 @@ export function CustomizeSheet({
   onToggleSource,
   onStartOver,
   syncError = false,
+  focusTopicId,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [confirming, setConfirming] = useState(false);
@@ -70,7 +73,11 @@ export function CustomizeSheet({
               <p className="hint">
                 Stories are ranked by how well they match the words behind each topic.
               </p>
-              <TopicPicker niches={niches} onChange={onNiches} />
+              <TopicPicker
+                niches={niches}
+                onChange={onNiches}
+                {...(focusTopicId ? { openId: focusTopicId } : {})}
+              />
             </section>
 
             <section aria-labelledby="sources-h">
@@ -90,7 +97,7 @@ export function CustomizeSheet({
             {confirming ? (
               <div className="sheet-foot-start" role="alert">
                 <span className="confirm-q">Clear all your topics?</span>
-                <button type="button" className="link" onClick={onStartOver}>
+                <button type="button" className="text-btn" onClick={onStartOver}>
                   Yes, clear them
                 </button>
                 <button type="button" className="link-quiet" onClick={() => setConfirming(false)}>

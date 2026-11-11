@@ -2,9 +2,10 @@
 
 export const PRICE = {
   free: '$0',
-  pro: '$5',
-  proPeriod: ' per month, 7 days free',
-  cancelNote: 'Cancel any time; you keep Pro until the period you paid for ends.',
+  pro: '$2',
+  proPeriod: ' for 30 days',
+  passLine: '$2 for 30 days, or ₹99 in India',
+  passNote: 'Pay once. Time adds up: buying again adds days to the end.',
 } as const;
 
 export const FREE_FEATURES: readonly string[] = [
@@ -20,4 +21,16 @@ export const PRO_FEATURES: readonly string[] = [
   'An Ideas queue that learns from what you pick and skip',
   'Your own RSS feeds',
   'A Telegram digest, web push and Notion sync',
+];
+
+/** The short Free/Pro lists on the Pricing page. */
+export const FREE_SHORT: readonly string[] = [
+  'The ranked Read view and search',
+  'An Ideas queue and 3 summaries a day',
+];
+
+export const PRO_SHORT: readonly string[] = [
+  '30 saved links and 100 summaries a day',
+  'Hooks, angles and title drafts for queued stories',
+  'Your RSS feeds, a Telegram digest and Notion sync',
 ];

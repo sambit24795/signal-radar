@@ -3,9 +3,10 @@ import type { ScoredItem } from '@radar/core/ranking';
 import { ApiError } from '../lib/api';
 import { addToIdeas, ideaBody, markSaved, openQueueOn, savedLinks } from '../lib/ideas';
 import { refreshMe, useMe } from '../lib/me';
+import { showGate } from '../lib/gate';
 import { Link } from './Link';
 
-type Phase = 'idle' | 'saving' | 'error' | 'pitch';
+type Phase = 'idle' | 'saving' | 'error';
 
 interface Props {
   item: ScoredItem;
@@ -13,7 +14,7 @@ interface Props {
   niche: string | null;
 }
 
-/** A quiet "Save to Ideas" action for a story (it sits in the item's action row). Any signed-in account saves it; signed-out visitors get a short note. */
+/** A quiet "Save to Ideas" action for a story (it sits in the item's action row). Any signed-in account saves it; signed-out visitors get the sign-in sheet. */
 export function SaveToIdeas({ item, niche }: Props) {
   const me = useMe();
   const saved = savedLinks.use().get(item.url);
@@ -29,7 +30,7 @@ export function SaveToIdeas({ item, niche }: Props) {
         <Link
           to="queue"
           className="link-quiet"
-          onClick={() => openQueueOn('picked')}
+          onClick={() => openQueueOn('new')}
           aria-label={`Open Ideas. ${item.title}`}
         >
           Open
@@ -40,7 +41,7 @@ export function SaveToIdeas({ item, niche }: Props) {
 
   const save = async () => {
     if (!signedIn) {
-      setPhase(phase === 'pitch' ? 'idle' : 'pitch');
+      showGate('save');
       return;
     }
     setPhase('saving');
@@ -50,7 +51,8 @@ export function SaveToIdeas({ item, niche }: Props) {
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         void refreshMe();
-        setPhase('pitch');
+        showGate('save');
+        setPhase('idle');
         return;
       }
       setMessage(e instanceof Error ? e.message : 'Could not save that.');
@@ -64,7 +66,6 @@ export function SaveToIdeas({ item, niche }: Props) {
         type="button"
         className="link-quiet"
         disabled={phase === 'saving'}
-        aria-expanded={phase === 'pitch' ? true : undefined}
         aria-label={`Save to Ideas. ${item.title}`}
         onClick={() => void save()}
       >
@@ -73,19 +74,6 @@ export function SaveToIdeas({ item, niche }: Props) {
       {phase === 'error' && (
         <span className="item-save-note" role="alert">
           {message}
-        </span>
-      )}
-      {phase === 'pitch' && (
-        <span className="item-save-note" role="status">
-          Ideas keeps what you save to your account.{' '}
-          <Link to="signin" signup className="link">
-            Create one
-          </Link>{' '}
-          or{' '}
-          <Link to="signin" className="link">
-            sign in
-          </Link>
-          .
         </span>
       )}
     </>

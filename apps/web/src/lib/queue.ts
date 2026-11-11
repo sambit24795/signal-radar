@@ -1,5 +1,5 @@
 import { api } from './api';
-import { formatUpdated } from './format';
+import { formatAge } from './format';
 
 export type QueueStatus = 'new' | 'picked' | 'skipped';
 
@@ -43,6 +43,11 @@ export function decideQueueItem(id: string, status: QueueStatus): Promise<unknow
   return api(`/api/queue/${id}/${ACTION[status]}`, { method: 'POST' });
 }
 
+/** `POST /api/queue/:id/brief` (Pro): has the model write the hook, angle and title draft. */
+export async function writeQueueBrief(id: string): Promise<QueueItem> {
+  return (await api<{ item: QueueItem }>(`/api/queue/${id}/brief`, { method: 'POST' })).item;
+}
+
 export interface QueueState {
   items: QueueItem[];
   nextCursor: string | null;
@@ -59,6 +64,7 @@ export type QueueAction =
   | { type: 'remove'; id: string }
   | { type: 'restore'; item: QueueItem; index: number }
   | { type: 'select'; id: string }
+  | { type: 'update'; item: QueueItem }
   | { type: 'move'; delta: 1 | -1 };
 
 /** Optimistic list state: a decided item leaves the list at once and can be put back in place. */
@@ -99,6 +105,11 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
       items.splice(Math.max(0, Math.min(action.index, items.length)), 0, action.item);
       return { ...state, items, selected: action.item.id };
     }
+    case 'update':
+      // A fresh copy of an item already listed (a brief just written); the order stays.
+      return state.items.some((i) => i.id === action.item.id)
+        ? { ...state, items: state.items.map((i) => (i.id === action.item.id ? action.item : i)) }
+        : state;
     case 'select':
       return state.items.some((i) => i.id === action.id)
         ? { ...state, selected: action.id }
@@ -129,10 +140,11 @@ export function effortLabel(effort: QueueItem['effort']): string {
   return effort ? (EFFORT[effort] ?? '') : '';
 }
 
-/** The meta line: source, topic, age, effort; whatever is missing is left out. */
+/** The meta line, as in the feed: source, age, effort; whatever is missing is left out. */
 export function queueMeta(item: QueueItem, now: number = Date.now()): string[] {
-  const age = formatUpdated(item.createdAt, now);
-  return [item.source, item.niche, age, effortLabel(item.effort)].filter((p): p is string => !!p);
+  return [item.source, formatAge(item.createdAt, now), effortLabel(item.effort)].filter(
+    (p): p is string => !!p,
+  );
 }
 
 /** What the Copy action puts on the clipboard: the hook, else the title draft, else the title. */

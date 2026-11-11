@@ -29,7 +29,7 @@ export function TopicsPanel({ onDone, onSkip }: Props) {
         >
           Show my feed
         </button>
-        <button type="button" className="link" onClick={onSkip}>
+        <button type="button" className="text-btn" onClick={onSkip}>
           Skip, show everything
         </button>
       </div>

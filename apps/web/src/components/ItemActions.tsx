@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ScoredItem } from '@radar/core/ranking';
 import {
   requestSummary,
@@ -8,7 +9,7 @@ import {
   IDLE,
 } from '../lib/summary';
 import { useMe } from '../lib/me';
-import { Link } from './Link';
+import { showGate } from '../lib/gate';
 import { SaveToIdeas } from './SaveToIdeas';
 
 interface Props {
@@ -16,10 +17,12 @@ interface Props {
   title: string;
   /** Present on Read stories: adds "Save to Ideas" beside Summarize. */
   save?: { item: ScoredItem; niche: string | null };
+  /** One more quiet action after Summarize (Ideas rows: Write or Rewrite brief). */
+  extra?: ReactNode;
 }
 
 /** The quiet actions under a story: Save to Ideas and Summarize, and the summary when it is open. */
-export function ItemActions({ url, title, save }: Props) {
+export function ItemActions({ url, title, save, extra }: Props) {
   const me = useMe();
   const state = summaries.use().get(url) ?? IDLE;
   const isPro = me.status === 'ready' && me.me.subscription.isPro;
@@ -34,28 +37,36 @@ export function ItemActions({ url, title, save }: Props) {
 
   const toggle = () => {
     if (state.open) return dispatchSummary(url, { type: 'toggle' });
-    if (!signedIn) return dispatchSummary(url, { type: 'pitch' });
+    if (!signedIn) {
+      // Nothing opens for a signed-out visitor: the app-level sheet asks them to sign in.
+      return showGate('summary');
+    }
     if (needsRequest(state)) void requestSummary(url);
     else dispatchSummary(url, { type: 'toggle' });
   };
 
-  const label =
-    state.status === 'pending' ? 'Reading the page…' : state.open ? 'Hide summary' : 'Summarize';
+  // While it loads, the panel below says "Reading the page…"; the button doesn't repeat it.
+  const label = state.open ? 'Hide summary' : 'Summarize';
 
   return (
     <div className="item-extras">
       <div className="item-actions">
-        {save && <SaveToIdeas item={save.item} niche={save.niche} />}
+        {save && (
+          <>
+            <SaveToIdeas item={save.item} niche={save.niche} />
+          </>
+        )}
         <button
           type="button"
           className="link-quiet"
           aria-expanded={state.open}
           aria-controls={panelId}
-          aria-label={`${label === 'Reading the page…' ? 'Summarize' : label}. ${title}`}
+          aria-label={`${label}. ${title}`}
           onClick={toggle}
         >
           {label}
         </button>
+        {extra && <>{extra}</>}
       </div>
       {state.open && (
         <div id={panelId} className="sum" aria-live="polite">
@@ -95,19 +106,6 @@ export function ItemActions({ url, title, save }: Props) {
               >
                 Try again
               </button>
-            </p>
-          )}
-          {state.status === 'pitch' && (
-            <p className="sum-note" role="status">
-              Summaries need an account.{' '}
-              <Link to="signin" signup className="link">
-                Create one
-              </Link>{' '}
-              or{' '}
-              <Link to="signin" className="link">
-                sign in
-              </Link>
-              .
             </p>
           )}
         </div>

@@ -12,9 +12,9 @@ describe('summaryReduce', () => {
     expect(needsRequest(s)).toBe(false);
     expect(summaryReduce(s, { type: 'toggle' }).open).toBe(true);
   });
-  it('asks again after a failure or a pitch, not after unreadable', () => {
+  it('asks again after a failure or a reset, not after unreadable', () => {
     expect(needsRequest(summaryReduce(IDLE, { type: 'fail', message: 'x' }))).toBe(true);
-    expect(needsRequest(summaryReduce(IDLE, { type: 'pitch' }))).toBe(true);
+    expect(needsRequest(summaryReduce(IDLE, { type: 'reset' }))).toBe(true);
     expect(needsRequest(summaryReduce(IDLE, { type: 'unreadable' }))).toBe(false);
   });
 });

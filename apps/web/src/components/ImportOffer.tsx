@@ -48,7 +48,7 @@ export function ImportOffer({ userId, stored, config, defaults, onDone }: Props)
         <button type="button" className="btn" disabled={busy} onClick={() => void run()}>
           {busy ? 'Importing' : 'Import'}
         </button>
-        <button type="button" className="link" onClick={finish}>
+        <button type="button" className="text-btn" onClick={finish}>
           No thanks
         </button>
       </div>

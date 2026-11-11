@@ -4,6 +4,7 @@ import { formatUpdated } from '../lib/format';
 import { rankFeed } from '../lib/rankClient';
 import { REPO_URL } from '../lib/site';
 import { FREE_FEATURES, PRICE, PRO_FEATURES } from '../lib/tiers';
+import { PolicyLinks } from './Footer';
 import { ItemList, Skeleton } from './ItemList';
 import { Link } from './Link';
 
@@ -72,7 +73,7 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: 'What does Pro cost?',
-    a: `${PRICE.pro} a month. The first 7 days are a trial. You can cancel any time and keep Pro until the period you paid for ends.`,
+    a: '₹99 or $2 for 30 days, ₹249 or $5 for 90 days, ₹799 or $15 for a year. No subscription and no auto-renew. Buying again adds days to the end. New accounts start with 7 days of Pro free.',
   },
   {
     q: 'Where do the stories come from?',
@@ -106,7 +107,7 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
 ];
 
 /** Light and dark screenshots. `dark` is null when the theme follows the system. */
-function Shot({ beat, dark }: { beat: Beat; dark: boolean | null }) {
+function Shot({ beat, dark, eager }: { beat: Beat; dark: boolean | null; eager: boolean }) {
   const [w, h] = beat.size;
   return (
     <picture>
@@ -119,7 +120,8 @@ function Shot({ beat, dark }: { beat: Beat; dark: boolean | null }) {
         width={w}
         height={h}
         alt={beat.alt}
-        loading="lazy"
+        style={{ aspectRatio: `${w} / ${h}` }}
+        loading={eager ? 'eager' : 'lazy'}
         decoding="async"
       />
     </picture>
@@ -169,7 +171,7 @@ export function Landing({
           </Link>
         </div>
         <p className="meta">
-          Reading needs no account. Pro is {PRICE.pro} a month after a 7-day trial.
+          Reading needs no account. Pro is {PRICE.passLine}, and new accounts get 7 days free.
         </p>
       </section>
 
@@ -244,7 +246,7 @@ export function Landing({
                 <p className="beat-body">{b.body}</p>
               </div>
               <figure className="beat-fig">
-                <Shot beat={b} dark={dark} />
+                <Shot beat={b} dark={dark} eager={i < 2} />
               </figure>
             </li>
           ))}
@@ -283,17 +285,18 @@ export function Landing({
                 <span className="price">{PRICE.pro}</span>
                 <span className="meta">{PRICE.proPeriod}</span>
               </p>
+              <p className="meta">₹99 in India. Also $5 for 90 days, $15 for a year.</p>
               <ul className="plan-list">
                 {PRO_FEATURES.map((f) => (
                   <li key={f}>{f}</li>
                 ))}
               </ul>
-              <Link to="signin" signup className="btn btn-solid">
-                Start 7-day trial
+              <Link to="pricing" className="btn btn-solid">
+                Choose a pass
               </Link>
             </section>
           </div>
-          <p className="meta lsec-more">{PRICE.cancelNote}</p>
+          <p className="meta lsec-more">{PRICE.passNote}</p>
         </div>
       </section>
 
@@ -335,6 +338,7 @@ export function Landing({
           </a>
           . It never posts for you.
         </p>
+        <PolicyLinks pricing />
       </footer>
     </div>
   );

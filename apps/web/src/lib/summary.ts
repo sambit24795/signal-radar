@@ -1,10 +1,11 @@
 import { api, ApiError } from './api';
+import { showGate } from './gate';
 import { createStore } from './store';
 
 /** One page's summary as the reader sees it. `open` is whether the panel under the story is showing. */
 export interface SummaryState {
   open: boolean;
-  status: 'idle' | 'pending' | 'ok' | 'unreadable' | 'error' | 'pitch';
+  status: 'idle' | 'pending' | 'ok' | 'unreadable' | 'error';
   tldr?: string;
   points?: string[];
   message?: string;
@@ -16,7 +17,7 @@ export type SummaryAction =
   | { type: 'ok'; tldr: string; points: string[] }
   | { type: 'unreadable' }
   | { type: 'fail'; message: string }
-  | { type: 'pitch' };
+  | { type: 'reset' };
 
 export const IDLE: SummaryState = { open: false, status: 'idle' };
 
@@ -32,14 +33,14 @@ export function summaryReduce(s: SummaryState, a: SummaryAction): SummaryState {
       return { open: true, status: 'unreadable' };
     case 'fail':
       return { open: true, status: 'error', message: a.message };
-    case 'pitch':
-      return { open: true, status: 'pitch' };
+    case 'reset':
+      return IDLE;
   }
 }
 
 /** Opening a panel that has no answer yet (or a failed one) asks the server; a finished one just shows. */
 export function needsRequest(s: SummaryState): boolean {
-  return s.status === 'idle' || s.status === 'error' || s.status === 'pitch';
+  return s.status === 'idle' || s.status === 'error';
 }
 
 /** Summaries read this session, by URL, so they survive the list re-rendering. */
@@ -76,7 +77,9 @@ export async function requestSummary(url: string): Promise<'done' | 'auth'> {
     return 'done';
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) {
-      dispatchSummary(url, { type: 'pitch' });
+      // Signed out: nothing was read, so the button goes back to "Summarize" and the sign-in sheet opens.
+      dispatchSummary(url, { type: 'reset' });
+      showGate('summary');
       return 'auth';
     }
     dispatchSummary(url, {

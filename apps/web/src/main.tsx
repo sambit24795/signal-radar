@@ -8,6 +8,7 @@ import '@fontsource/eb-garamond/latin-500.css';
 import '@fontsource/jetbrains-mono/latin-400.css';
 import './styles.css';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 registerSW({ immediate: true });
 
@@ -15,6 +16,8 @@ registerSW({ immediate: true });
 // so createRoot swaps it in place; there is nothing to hydrate against the live feed or session.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

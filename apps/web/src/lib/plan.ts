@@ -42,9 +42,9 @@ export function planSummary(sub: Subscription, now = Date.now()): PlanSummary {
     return {
       kind: 'active',
       title: 'Pro',
-      detail: sub.currentPeriodEnd ? `Renews ${formatDate(sub.currentPeriodEnd)}.` : 'Active.',
+      detail: sub.currentPeriodEnd ? `Pro until ${formatDate(sub.currentPeriodEnd)}.` : 'Active.',
       canUpgrade: false,
-      canCancel: true,
+      canCancel: false,
     };
   }
   if (sub.status === 'canceled' && sub.isPro) {

@@ -21,6 +21,22 @@ const netFetch = async (url: string) => {
       }),
     );
   }
+  if (host === 'www.googleapis.com') {
+    return new Response(
+      JSON.stringify(
+        url.includes('/search')
+          ? {
+              items: [
+                {
+                  id: { videoId: 'vidK' },
+                  snippet: { title: 'Rust in ten minutes', channelTitle: 'Crab Club' },
+                },
+              ],
+            }
+          : { items: [{ id: 'vidK', statistics: { viewCount: '1200' } }] },
+      ),
+    );
+  }
   return new Response('', { status: 500 });
 };
 
@@ -63,6 +79,25 @@ describe.skipIf(!dbAvailable)('search (GET /api/search)', () => {
     expect(calls).toBe(before);
     expect((await ctx.app.request('/api/search?q=a')).status).toBe(400);
     expect((await ctx.app.request('/api/search')).status).toBe(400);
+  });
+
+  it('adds YouTube when the server has a key, and never sends the key to the client', async () => {
+    const key = 'AIza-route-test-key';
+    process.env['YOUTUBE_API_KEY'] = key;
+    try {
+      const res = await ctx.app.request('/api/search?q=rust%20youtube%20key');
+      const text = await res.text();
+      expect(text).not.toContain(key);
+      const body = JSON.parse(text) as {
+        items: { sourceKind: string; source: string; momentum: { views?: number } }[];
+        answered: string[];
+      };
+      expect(body.answered).toContain('youtube');
+      const yt = body.items.find((i) => i.sourceKind === 'youtube');
+      expect(yt).toMatchObject({ source: 'Crab Club', momentum: { views: 1200 } });
+    } finally {
+      delete process.env['YOUTUBE_API_KEY'];
+    }
   });
 
   it('rate limits one IP to 30 a minute (429)', async () => {

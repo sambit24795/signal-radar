@@ -30,15 +30,17 @@ function formatZodError(err: z.ZodError): string {
 }
 
 /**
- * Pro = active, trialing with an unexpired trial, or canceled while still on the pro plan
- * with an unexpired paid period (stub cancel keeps access until `currentPeriodEnd`).
+ * Pro = active while the paid period is unset (legacy rows) or running, trialing with an
+ * unexpired trial, or canceled while still on the pro plan with an unexpired paid period.
  */
 export function isPro(
   sub: Pick<Subscription, 'status' | 'trialEndsAt' | 'plan' | 'currentPeriodEnd'> | undefined,
   now = new Date(),
 ): boolean {
   if (!sub) return false;
-  if (sub.status === 'active') return true;
+  if (sub.status === 'active') {
+    return sub.currentPeriodEnd === null || sub.currentPeriodEnd > now;
+  }
   if (sub.status === 'canceled') {
     return sub.plan === 'pro' && sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
   }

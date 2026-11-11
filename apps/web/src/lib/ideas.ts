@@ -20,7 +20,8 @@ export function normalizeLink(input: string): string | null {
   try {
     const u = new URL(url);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-    if (!u.hostname.includes('.') && u.hostname !== 'localhost') return null;
+    // The server only fetches public pages, so a bare host like `localhost` is refused here too.
+    if (!u.hostname.includes('.')) return null;
     return u.toString();
   } catch {
     return null;

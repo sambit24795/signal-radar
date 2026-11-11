@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Niche } from '@radar/core/ranking';
+import { withTopicSources, type Niche } from '@radar/core/ranking';
+import { PolicyLinks } from './components/Footer';
 import { Frame } from './components/Frame';
 import { Gate } from './components/Gate';
 import { ImportOffer } from './components/ImportOffer';
 import { Landing } from './components/Landing';
+import { Contact, Privacy, Refunds, Terms } from './components/Legal';
 import { Link } from './components/Link';
 import { Pricing } from './components/Pricing';
 import { Queue } from './components/Queue';
 import { ReadView } from './components/ReadView';
 import { Settings } from './components/Settings';
 import { SignIn } from './components/SignIn';
+import { SignInSheet } from './components/SignInSheet';
 import { Welcome } from './components/Welcome';
 import { useInstallPrompt, useNow, useOnline, useRadarData } from './hooks';
 import { signOut } from './lib/auth';
@@ -25,8 +28,10 @@ import {
 } from './lib/prefs';
 import { hasOpenedRadar, landingRedirect, markRadarOpened } from './lib/landing';
 import { justOnboarded, useOnboardingDismissed } from './lib/onboarding';
+import { endingSoonNote } from './lib/passes';
 import { importFlagKey, mergeServerConfig, shouldOfferImport } from './lib/prefsMerge';
 import { PAGE_META } from './lib/site';
+import { findTopicSubreddits } from './lib/topicItems';
 import { navigate, useRoute, type RouteName } from './lib/route';
 import type { SourceKind } from './lib/view';
 
@@ -50,6 +55,10 @@ const TITLES: Record<RouteName, string> = {
   settings: 'Settings · Signal Radar',
   pricing: PAGE_META['/pricing'].title,
   signin: 'Sign in · Signal Radar',
+  terms: PAGE_META['/terms'].title,
+  privacy: PAGE_META['/privacy'].title,
+  refunds: PAGE_META['/refunds'].title,
+  contact: PAGE_META['/contact'].title,
 };
 
 const offeredBefore = (userId: string) => {
@@ -105,7 +114,9 @@ export function App() {
 
   // `/` is for first-time visitors; the queue note only lives on the queue.
   const redirect =
-    route.name === 'landing' ? landingRedirect(me.status, hasOpenedRadar(localStorage)) : null;
+    route.name === 'landing' && !route.about
+      ? landingRedirect(me.status, hasOpenedRadar(localStorage))
+      : null;
   const needsSetup =
     userId !== null && config !== null && config.onboardedAt === null && !dismissed;
   useEffect(() => {
@@ -168,6 +179,31 @@ export function App() {
   const showEverything = () => update({ ...stored, niches: null, showAll: true });
   const settling = me.status === 'loading' || (userId !== null && config === null);
 
+  // Topics saved before topic sources existed (or just added) get theirs lazily: the news search
+  // plus up to two subreddits. One topic at a time, because keyless Reddit allows few requests.
+  const latest = useRef({ niches: prefs?.niches ?? [], setNiches });
+  latest.current = { niches: prefs?.niches ?? [], setNiches };
+  const asked = useRef(new Set<string>());
+  const needSources = prefs ? prefs.niches.filter((n) => !n.sources).map((n) => n.id) : [];
+  const needKey = needSources.join('|');
+  useEffect(() => {
+    if (settling || !needKey) return;
+    const todo = needKey.split('|').filter((id) => !asked.current.has(id));
+    if (todo.length === 0) return;
+    for (const id of todo) asked.current.add(id);
+    void (async () => {
+      for (const id of todo) {
+        const niche = latest.current.niches.find((n) => n.id === id);
+        if (!niche || niche.sources) continue;
+        const reddit = await findTopicSubreddits(niche.name);
+        // Reddit would not answer: keep the news search, try again on the next visit.
+        if (!reddit) return;
+        const cur = latest.current.niches;
+        latest.current.setNiches(cur.map((n) => (n.id === id ? withTopicSources(n, reddit) : n)));
+      }
+    })();
+  }, [needKey, settling]);
+
   const onSignOut = useCallback(async () => {
     try {
       await signOut();
@@ -185,6 +221,10 @@ export function App() {
     userId && config && defaults && !offerDone && route.name !== 'signin'
       ? shouldOfferImport(stored, config, offeredBefore(userId))
       : false;
+
+  // A quiet one-line warning on the feed when a pass is about to run out.
+  const proEnds =
+    route.name === 'read' && me.status === 'ready' ? endingSoonNote(me.me.proUntil) : '';
 
   return (
     <Frame
@@ -206,19 +246,19 @@ export function App() {
         ) : null
       }
       footer={
-        route.name !== 'pricing' &&
-        route.name !== 'landing' &&
-        route.name !== 'welcome' &&
-        !(me.status === 'ready' && me.me.subscription.isPro) ? (
+        route.name === 'landing' ? null : (
           <footer className="footer">
-            <p>
-              Pro adds AI-written hooks, angles and title drafts.{' '}
-              <Link to="pricing" className="link">
-                See Pricing
-              </Link>
-            </p>
+            {proEnds && route.name !== 'pricing' && (
+              <p className="foot-note">
+                {proEnds}{' '}
+                <Link to="pricing" className="foot-action">
+                  Add days
+                </Link>
+              </p>
+            )}
+            <PolicyLinks about={me.status === 'anon'} pricing={route.name !== 'pricing'} />
           </footer>
-        ) : null
+        )
       }
     >
       {route.name === 'landing' &&
@@ -281,9 +321,14 @@ export function App() {
           <Gate me={me} feature="settings" />
         ))}
       {route.name === 'pricing' && <Pricing me={me} />}
+      {route.name === 'terms' && <Terms />}
+      {route.name === 'privacy' && <Privacy />}
+      {route.name === 'refunds' && <Refunds />}
+      {route.name === 'contact' && <Contact />}
       {route.name === 'signin' && (
         <SignIn me={me} startSignup={route.signup} onSignOut={() => void onSignOut()} />
       )}
+      <SignInSheet />
     </Frame>
   );
 }

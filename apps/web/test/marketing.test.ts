@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { fillRoot, normalizeSiteUrl, setPageHead } from '../build/prerender';
 import { Landing } from '../src/components/Landing';
 import { Pricing } from '../src/components/Pricing';
-import { FREE_FEATURES, PRICE, PRO_FEATURES } from '../src/lib/tiers';
+import { FREE_FEATURES, FREE_SHORT, PRICE, PRO_FEATURES, PRO_SHORT } from '../src/lib/tiers';
 
 const html = (node: Parameters<typeof renderToStaticMarkup>[0]) =>
   renderToStaticMarkup(node).replaceAll('&#x27;', "'").replaceAll('&amp;', '&');
@@ -21,12 +21,12 @@ describe('tier data', () => {
       createElement(Landing, { data: { status: 'loading' }, now: 0, retry: noop }),
     );
     const pricing = html(createElement(Pricing, { me: { status: 'loading' } }));
-    for (const f of [...FREE_FEATURES, ...PRO_FEATURES]) {
-      expect(landing).toContain(f);
-      expect(pricing).toContain(f);
-    }
+    for (const f of [...FREE_FEATURES, ...PRO_FEATURES]) expect(landing).toContain(f);
+    for (const f of [...FREE_SHORT, ...PRO_SHORT]) expect(pricing).toContain(f);
     expect(landing).toContain(PRICE.pro);
-    expect(pricing).toContain(PRICE.pro);
+    // Pricing draws the dollar prices before the server says which currency applies.
+    expect(pricing).toContain('$2');
+    expect(pricing).toContain('$15');
   });
 
   it('gives the landing page one h1', () => {
@@ -50,7 +50,7 @@ describe('page head helpers', () => {
     expect(out).toContain('<title>Pricing · Signal Radar</title>');
     expect(out).toContain('rel="canonical" href="https://a.test/pricing"');
     expect(out).toContain('property="og:url" content="https://a.test/pricing"');
-    expect(out).toMatch(/property="og:description" content="Free keeps[^"]*\$5 a month/);
+    expect(out).toMatch(/property="og:description" content="Free keeps[^"]*\$2 for 30 days/);
   });
 
   it('fills #root and tags it with the route', () => {

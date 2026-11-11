@@ -44,6 +44,8 @@ export interface EverywhereResult {
   items: ScoredItem[];
   /** Sources that did not answer. */
   failed: string[];
+  /** Sources that did answer; YouTube is absent when the server has no key or quota. */
+  answered: string[];
 }
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -51,8 +53,18 @@ const SOURCE_NAMES: Record<string, string> = {
   news: 'Google News',
   github: 'GitHub',
   devto: 'DEV',
+  youtube: 'YouTube',
 };
+/** How the results line names a source that answered ("news" is Google News). */
+const ANSWERED_NAMES: Record<string, string> = { news: 'news sites' };
 export const sourceName = (id: string) => SOURCE_NAMES[id] ?? id;
+
+/** "Hacker News, news sites, GitHub, DEV and YouTube": only the sources that answered. */
+export function answeredLine(answered: readonly string[]): string {
+  const names = answered.map((id) => ANSWERED_NAMES[id] ?? SOURCE_NAMES[id] ?? id);
+  if (names.length <= 1) return names[0] ?? 'the live sources';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
 
 const memo = new Map<string, EverywhereResult>();
 
@@ -61,12 +73,13 @@ export async function searchEverywhere(q: string): Promise<EverywhereResult> {
   const key = fold(q.trim());
   const hit = memo.get(key);
   if (hit) return hit;
-  const res = await api<{ items: Item[]; failed: string[] }>(
+  const res = await api<{ items: Item[]; failed: string[]; answered?: string[] }>(
     `/api/search?q=${encodeURIComponent(q.trim())}`,
   );
   const out: EverywhereResult = {
     items: res.items.map((i) => ({ ...i, keywordScore: 0, score: 0, niches: [] })),
     failed: res.failed,
+    answered: res.answered ?? [],
   };
   // A search where a source dropped out is worth retrying later.
   if (res.failed.length === 0) memo.set(key, out);

@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type { CreatorProfile, Currency, PassId, TopicSource } from '@radar/core';
 import {
   boolean,
   index,
@@ -91,7 +92,30 @@ export const verification = pgTable(
 
 export type Plan = 'free' | 'pro';
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'none';
-export type SubscriptionProvider = 'lemonsqueezy' | 'stub';
+export type SubscriptionProvider = 'lemonsqueezy' | 'stub' | 'razorpay';
+
+export type PassPurchaseStatus = 'created' | 'paid' | 'failed';
+
+/** One prepaid Pro pass bought through Razorpay. Amount is in minor units (paise/cents). */
+export const passPurchase = pgTable(
+  'pass_purchase',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    passId: text('pass_id').$type<PassId>().notNull(),
+    currency: text('currency').$type<Currency>().notNull(),
+    amount: integer('amount').notNull(),
+    days: integer('days').notNull(),
+    razorpayOrderId: text('razorpay_order_id').notNull().unique(),
+    razorpayPaymentId: text('razorpay_payment_id').unique(),
+    status: text('status').$type<PassPurchaseStatus>().notNull().default('created'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+  },
+  (t) => [index('pass_purchase_user_idx').on(t.userId)],
+);
 
 export const subscription = pgTable('subscription', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -118,6 +142,8 @@ export interface NicheConfig {
   name: string;
   weight?: number;
   keywords: (string | { term: string; weight?: number })[];
+  /** Topic sources, stored with the topic. */
+  sources?: TopicSource[];
 }
 
 /** A user-supplied RSS/Atom feed. `id` is `custom:<short hash of url>`. */
@@ -139,6 +165,8 @@ export const userConfig = pgTable('user_config', {
   niches: jsonb('niches').$type<NicheConfig[]>().notNull().default([]),
   /** Enabled source ids. */
   sources: jsonb('sources').$type<string[]>().notNull().default([]),
+  /** What they make and for whom; null until set. Shapes the briefs. */
+  creator: jsonb('creator').$type<CreatorProfile | null>(),
   topN: integer('top_n').notNull().default(10),
   customFeeds: jsonb('custom_feeds').$type<CustomFeedConfig[]>().notNull().default([]),
   telegramChatId: text('telegram_chat_id'),

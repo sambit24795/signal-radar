@@ -50,6 +50,20 @@
       "when": 1794249589728,
       "tag": "0006_red_ezekiel_stane",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794295067547,
+      "tag": "0007_skinny_yellow_claw",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794320726609,
+      "tag": "0008_big_rick_jones",
+      "breakpoints": true
     }
   ]
 }

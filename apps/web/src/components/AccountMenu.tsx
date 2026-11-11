@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MeState } from '../lib/me';
+import { proUntilNote } from '../lib/passes';
 import { Link } from './Link';
 
 interface Props {
@@ -43,13 +44,14 @@ export function AccountMenu({ me, onSignOut }: Props) {
 
   const { user } = me.me;
   const initial = (user.name || user.email).trim().charAt(0).toUpperCase() || '?';
+  const proUntil = proUntilNote(me.me.proUntil);
 
   return (
     <div className="account" ref={root}>
       <button
         ref={button}
         type="button"
-        className="avatar"
+        className="icon-btn avatar"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Account, ${user.email}`}
@@ -60,6 +62,11 @@ export function AccountMenu({ me, onSignOut }: Props) {
       {open && (
         <div className="menu" role="menu">
           <p className="menu-who meta">{user.email}</p>
+          {proUntil && (
+            <Link to="pricing" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
+              {proUntil} · Add days
+            </Link>
+          )}
           <Link to="settings" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
             Settings
           </Link>

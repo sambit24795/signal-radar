@@ -2,9 +2,16 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import radarConfig from '../../radar.config';
 import { normalizeSiteUrl, prerenderPlugin, siteUrlPlugin } from './build/prerender';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
+
+/** The policy pages read these from radar.config.ts, through the build and at runtime. */
+const legalDefine = {
+  __RADAR_LEGAL_NAME__: JSON.stringify(radarConfig.legalName),
+  __RADAR_LEGAL_EMAIL__: JSON.stringify(radarConfig.contactEmail),
+};
 
 export default defineConfig(({ mode }) => {
   // API_PORT lives in the repo-root .env, shared with `pnpm api:dev`.
@@ -14,10 +21,11 @@ export default defineConfig(({ mode }) => {
   return {
     // VITE_* variables live in the repo-root .env too.
     envDir: '../..',
+    define: legalDefine,
     plugins: [
       react(),
       siteUrlPlugin(siteUrl),
-      prerenderPlugin(siteUrl, here),
+      prerenderPlugin(siteUrl, here, legalDefine),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icons/mark.svg', 'icons/apple-touch-icon.png'],
@@ -68,6 +76,10 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    server: { proxy: { '/api': `http://localhost:${apiPort}` } },
+    // Quick tunnels (cloudflared) for testing on a phone.
+    server: {
+      allowedHosts: ['.trycloudflare.com'],
+      proxy: { '/api': `http://localhost:${apiPort}` },
+    },
   };
 });

@@ -20,6 +20,7 @@ import {
   UnsafeUrlError,
   type AiScore,
   type Niche,
+  type Provider,
   type ScoredItem,
 } from '@radar/core';
 import { createPgStore, schema, type QueueStatus } from '@radar/db';
@@ -58,14 +59,29 @@ const metaContent = (html: string, attr: 'property' | 'name', key: string): stri
 };
 
 /** og:title / <title> and og:description / meta description from a page's HTML. */
+/**
+ * Page titles carry site chrome: "GitHub - owner/repo: description", "Story | Site". Keep the part a
+ * reader would call the title. Only short pipe suffixes are cut, so real titles stay whole.
+ */
+export function cleanPageTitle(raw: string | null): string | null {
+  if (!raw) return raw;
+  let t = raw.trim();
+  const gh = /^GitHub - ([\w.-]+\/[\w.-]+)(?::\s.*)?$/.exec(t);
+  if (gh) return gh[1]!;
+  const pipe = t.lastIndexOf(' | ');
+  if (pipe > 0 && t.length - pipe <= 40 && pipe >= 15) t = t.slice(0, pipe).trim();
+  return t || null;
+}
+
 export function readPageMeta(html: string): { title: string | null; snippet: string | null } {
   const head = html.slice(0, 200_000);
   const titleTag = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1];
   return {
-    title:
+    title: cleanPageTitle(
       metaContent(head, 'property', 'og:title') ??
-      metaContent(head, 'name', 'twitter:title') ??
-      (titleTag ? stripHtml(titleTag) || null : null),
+        metaContent(head, 'name', 'twitter:title') ??
+        (titleTag ? stripHtml(titleTag) || null : null),
+    ),
     snippet:
       metaContent(head, 'property', 'og:description') ??
       metaContent(head, 'name', 'description') ??
@@ -81,6 +97,48 @@ function decodeCursor(raw: string): { ts: string; id: string } {
   if (!ts || !id || !UUID.test(id) || Number.isNaN(Date.parse(ts)))
     return badRequest('invalid cursor');
   return { ts, id };
+}
+
+/** The reader's niches in the shape the scorer wants. */
+async function loadNiches(db: RouteDeps['db'], userId: string): Promise<Niche[]> {
+  const [cfg] = await db
+    .select({ niches: schema.userConfig.niches })
+    .from(schema.userConfig)
+    .where(eq(schema.userConfig.userId, userId));
+  return (cfg?.niches ?? []).map((n) => ({
+    id: n.id,
+    name: n.name,
+    weight: n.weight ?? 1,
+    keywords: n.keywords.map((k) =>
+      typeof k === 'string' ? k : { term: k.term, weight: k.weight ?? 1 },
+    ),
+  }));
+}
+
+/** Ask the model for a brief on one item; null on timeout or failure. Never throws. */
+async function writeBrief(
+  db: RouteDeps['db'],
+  userId: string,
+  item: ScoredItem,
+  niches: Niche[],
+  provider: Provider,
+  warn: (m: string) => void,
+): Promise<AiScore | null> {
+  try {
+    const feedback = await createPgStore(db).feedback(userId, radarConfig.scoring.feedbackLimit);
+    const [cfg] = await db
+      .select({ creator: schema.userConfig.creator })
+      .from(schema.userConfig)
+      .where(eq(schema.userConfig.userId, userId));
+    const system = buildSystemPrompt(niches, feedback, cfg?.creator ?? null);
+    return await Promise.race([
+      scoreOne(provider, system, item, warn),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), AI_TIMEOUT_MS).unref()),
+    ]);
+  } catch (e) {
+    warn((e as Error).message);
+    return null;
+  }
 }
 
 export function queueRoutes(deps: RouteDeps) {
@@ -130,13 +188,17 @@ export function queueRoutes(deps: RouteDeps) {
       return badRequest(e instanceof Error ? e.message : 'invalid url');
     }
 
-    // Already queued: just pick it. Duplicates never count toward the daily cap.
+    // Already queued: leave it where it is, except a skipped one comes back to New, since the
+    // reader asked for it again. Duplicates never count toward the daily cap.
     const pickExisting = async () => {
-      const [row] = await db
+      const mine = and(eq(q.userId, userId), eq(q.url, url));
+      const [revived] = await db
         .update(q)
-        .set({ status: 'picked', decidedAt: new Date() })
-        .where(and(eq(q.userId, userId), eq(q.url, url)))
+        .set({ status: 'new', decidedAt: null })
+        .where(and(mine, eq(q.status, 'skipped')))
         .returning();
+      if (revived) return revived;
+      const [row] = await db.select().from(q).where(mine);
       return row;
     };
     const dupe = await pickExisting();
@@ -185,18 +247,7 @@ export function queueRoutes(deps: RouteDeps) {
       if (!title) return badRequest('Could not find a title on that page. Add one yourself.');
     }
 
-    const [cfg] = await db
-      .select({ niches: schema.userConfig.niches })
-      .from(schema.userConfig)
-      .where(eq(schema.userConfig.userId, userId));
-    const niches: Niche[] = (cfg?.niches ?? []).map((n) => ({
-      id: n.id,
-      name: n.name,
-      weight: n.weight ?? 1,
-      keywords: n.keywords.map((k) =>
-        typeof k === 'string' ? k : { term: k.term, weight: k.weight ?? 1 },
-      ),
-    }));
+    const niches = await loadNiches(db, userId);
 
     const source = body.source ?? DEFAULT_SOURCE;
     const now = new Date();
@@ -217,32 +268,18 @@ export function queueRoutes(deps: RouteDeps) {
     };
 
     // Enrich with the configured model; any failure falls back to the snippet summary.
-    let ai: AiScore | null = null;
     const warn = (m: string) => console.warn(`queue add: ${m}`);
-    try {
-      // Free accounts never spend model calls: page metadata and a snippet summary only.
-      const provider = !pro
-        ? noneProvider
-        : createProvider(
-            radarConfig,
-            process.env,
-            warn,
-            deps.net?.fetch ?? createFetch(AI_TIMEOUT_MS),
-          );
-      if (provider.id !== 'none') {
-        const feedback = await createPgStore(db).feedback(
-          userId,
-          radarConfig.scoring.feedbackLimit,
+    // Free accounts never spend model calls: page metadata and a snippet summary only.
+    const provider = !pro
+      ? noneProvider
+      : createProvider(
+          radarConfig,
+          process.env,
+          warn,
+          deps.net?.fetch ?? createFetch(AI_TIMEOUT_MS),
         );
-        const system = buildSystemPrompt(niches, feedback);
-        ai = await Promise.race([
-          scoreOne(provider, system, item, warn),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), AI_TIMEOUT_MS).unref()),
-        ]);
-      }
-    } catch (e) {
-      warn((e as Error).message);
-    }
+    const ai =
+      provider.id === 'none' ? null : await writeBrief(db, userId, item, niches, provider, warn);
     const fallback = noneFallback(item, niches);
 
     const [row] = await db
@@ -262,8 +299,9 @@ export function queueRoutes(deps: RouteDeps) {
         titleDraft: ai?.title ?? null,
         format: ai?.format ?? null,
         reasons: ai ? [ai.why] : [],
-        status: 'picked',
-        decidedAt: now,
+        // Lands in New like everything else; the reader picks it from there.
+        status: 'new',
+        decidedAt: null,
         addedByUser: true,
       })
       .onConflictDoNothing({ target: [q.userId, q.url] })
@@ -273,6 +311,73 @@ export function queueRoutes(deps: RouteDeps) {
     const raced = await pickExisting();
     if (!raced) throw new HTTPException(500, { message: 'could not add item' });
     return c.json({ item: raced }, 200);
+  });
+
+  // Pro: (re)write the AI brief for an item that was added without one.
+  r.post('/:id/brief', async (c) => {
+    const userId = c.get('user').id;
+    const id = c.req.param('id') ?? '';
+    if (!UUID.test(id)) return c.json({ error: 'not found' }, 404);
+    if (!(await userIsPro(db, userId))) {
+      return c.json({ error: 'Briefs are part of Pro.' }, 402);
+    }
+    const [row] = await db
+      .select()
+      .from(q)
+      .where(and(eq(q.id, id), eq(q.userId, userId)));
+    if (!row) return c.json({ error: 'not found' }, 404);
+
+    const warn = (m: string) => console.warn(`queue brief: ${m}`);
+    const provider = createProvider(
+      radarConfig,
+      process.env,
+      warn,
+      deps.net?.fetch ?? createFetch(AI_TIMEOUT_MS),
+    );
+    if (provider.id === 'none')
+      return c.json({ error: 'Briefs are not available right now.' }, 503);
+
+    const niches = await loadNiches(db, userId);
+    const now = new Date();
+    const base = normalizeItem(
+      {
+        url: row.url,
+        title: row.title,
+        snippet: truncate(row.summary ?? '', 400),
+        publishedAt: now,
+      },
+      { name: row.source, kind: 'rss' },
+      now,
+    );
+    if (!base) return c.json({ error: 'Could not write the brief. Try again.' }, 502);
+    const match = scoreKeywords(base, compileNiches(niches));
+    const nicheId = row.niche ?? match.niches[0];
+    const item: ScoredItem = {
+      ...base,
+      keywordScore: match.keywordScore,
+      score: match.keywordScore,
+      niches: nicheId ? [nicheId] : [],
+    };
+    const ai = await writeBrief(db, userId, item, niches, provider, warn);
+    if (!ai) return c.json({ error: 'Could not write the brief. Try again.' }, 502);
+
+    const [updated] = await db
+      .update(q)
+      .set({
+        summary: ai.summary,
+        why: ai.why,
+        effort: ai.effort,
+        hook: ai.hook,
+        angle: ai.angle,
+        titleDraft: ai.title,
+        format: ai.format,
+        score: ai.score,
+        reasons: [ai.why],
+      })
+      .where(and(eq(q.id, id), eq(q.userId, userId)))
+      .returning();
+    if (!updated) return c.json({ error: 'not found' }, 404);
+    return c.json({ item: updated });
   });
 
   const decide = (status: QueueStatus) => async (c: import('hono').Context<AppVars>) => {

@@ -97,6 +97,7 @@ variables, read from `.env` by the API and the CLI.
 | `VAPID_PUBLIC_KEY`            | Web Push public key. Generate a pair with `pnpm --filter @radar/core exec web-push generate-vapid-keys`. |
 | `VAPID_PRIVATE_KEY`           | Web Push private key. With the other VAPID vars unset, push is disabled.                                 |
 | `VAPID_SUBJECT`               | `mailto:` contact sent to push services.                                                                 |
+| `YOUTUBE_API_KEY`             | YouTube Data API v3 key (server-side only). Unset: YouTube is left out of search.                        |
 | `TELEGRAM_BOT_USERNAME`       | Bot username without the `@`. Needed for the Connect Telegram link; unset hides the button.              |
 | `TELEGRAM_WEBHOOK_SECRET`     | Secret the bot webhook must present. Unset: the webhook returns 404.                                     |
 | `VITE_SITE_URL`               | Web origin for canonical and share URLs, sitemap and robots at build. Default `localhost:5173`.          |
@@ -114,6 +115,24 @@ pnpm radar telegram:webhook https://api.example.com
 ```
 
 Pro users can then connect their chat from Settings, Notifications.
+
+## Search
+
+"Search everywhere" asks the live sources directly: Hacker News, Google News, GitHub and DEV (single-word queries only),
+plus YouTube when `YOUTUBE_API_KEY` is set. It runs only when the reader chooses it, never on each keystroke. The
+results line names the sources that answered.
+
+YouTube uses the Data API v3 (`search` then `videos?part=statistics`). Create a key in Google Cloud Console: enable
+"YouTube Data API v3", then Credentials, API key, restricted to that API. The free tier is 10,000 units a day for the
+whole deployment and a search costs 100 units, so about 100 searches a day. The server therefore:
+
+- caches each normalized query for an hour (at most 500 queries);
+- stops calling the API at 9,000 units counted in memory, and after a `quotaExceeded` answer until midnight Pacific;
+- logs one line when it skips YouTube (no key, budget, quota or an API error).
+
+There is no RSSHub fallback: RSSHub has no YouTube search route (it only serves channel, user, playlist, live and
+similar feeds), so when the API cannot answer, YouTube is simply absent from the results. The key is never sent to the
+web app.
 
 ## CLI
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Item } from '@radar/core/ranking';
-import { filterItems, parseSearch, searchHref } from '../src/lib/search';
+import { answeredLine, filterItems, parseSearch, searchHref } from '../src/lib/search';
 
 const item = (title: string, tags: string[] = [], source = 'Hacker News'): Item => ({
   id: title,
@@ -40,5 +40,16 @@ describe('search URL', () => {
     expect(searchHref('/read', { q: ' rust ', all: true })).toBe('/read?q=rust&all=1');
     expect(searchHref('/read', { q: 'rust', all: false })).toBe('/read?q=rust');
     expect(searchHref('/read', { q: '  ', all: true })).toBe('/read');
+  });
+});
+
+describe('answeredLine', () => {
+  it('names only the sources that answered', () => {
+    expect(answeredLine(['hn', 'news', 'github', 'devto', 'youtube'])).toBe(
+      'Hacker News, news sites, GitHub, DEV and YouTube',
+    );
+    expect(answeredLine(['hn', 'news', 'github'])).toBe('Hacker News, news sites and GitHub');
+    expect(answeredLine(['github'])).toBe('GitHub');
+    expect(answeredLine([])).toBe('the live sources');
   });
 });

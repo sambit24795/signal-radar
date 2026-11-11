@@ -69,6 +69,14 @@ describe('queueReducer', () => {
     ).toBeNull();
   });
 
+  it('updates a listed item in place and ignores an unknown one', () => {
+    const base = load(['a', 'b']);
+    const next = queueReducer(base, { type: 'update', item: { ...item('b'), hook: 'Fresh' } });
+    expect(ids(next)).toEqual(['a', 'b']);
+    expect(next.items[1]!.hook).toBe('Fresh');
+    expect(queueReducer(base, { type: 'update', item: item('zz') })).toBe(base);
+  });
+
   it('restores a removed row at its old position (rollback and undo)', () => {
     const s = load(['a', 'b', 'c']);
     const removed = queueReducer(s, { type: 'remove', id: 'b' });
@@ -105,8 +113,8 @@ describe('queue item text', () => {
 
   it('builds the meta line from what is there and skips the rest', () => {
     const full = { ...item('a'), niche: 'AI tools', effort: 'S' as const };
-    expect(queueMeta(full, now)).toEqual(['Hacker News', 'AI tools', '3 h ago', 'small effort']);
-    expect(queueMeta(item('b'), now)).toEqual(['Hacker News', '3 h ago']);
+    expect(queueMeta(full, now)).toEqual(['Hacker News', '3h', 'small effort']);
+    expect(queueMeta(item('b'), now)).toEqual(['Hacker News', '3h']);
   });
 
   it('turns effort letters into words', () => {

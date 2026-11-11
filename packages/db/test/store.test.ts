@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { defineConfig, runForUsers } from '@radar/core';
-import { schema, createPgStore, type Db } from '../src/index.js';
+import { schema, createPgStore, grantPass, type Db } from '../src/index.js';
 import { openTestDb, resetTestDb, testDbAvailable } from '../src/testing.js';
 import { NOW, fixture, res, routedFetch } from '../../core/test/helpers.js';
 
@@ -62,6 +62,73 @@ describe.skipIf(!available)('createPgStore + runForUsers', () => {
     const plan = (id: string) => users.find((u) => u.id === id)?.plan;
     expect(['active', 'canceled', 'trial'].map(plan)).toEqual(['pro', 'pro', 'pro']);
     expect(['expired', 'lapsed', 'none'].map(plan)).toEqual(['free', 'free', 'free']);
+  });
+
+  it('treats an active subscription past its period end as free, and legacy rows without one as Pro', async () => {
+    await addUser('running', { status: 'active', currentPeriodEnd: future });
+    await addUser('lapsed', { status: 'active', currentPeriodEnd: past });
+    await addUser('legacy', { status: 'active' });
+    const users = await createPgStore(db).listQueueUsers(NOW);
+    const plan = (id: string) => users.find((u) => u.id === id)?.plan;
+    expect(['running', 'lapsed', 'legacy'].map(plan)).toEqual(['pro', 'free', 'pro']);
+  });
+
+  it('grantPass marks a purchase paid and adds its days once, however many times it is called', async () => {
+    await addUser('ann', { status: 'none' }, []);
+    const purchase = (
+      await db
+        .insert(schema.passPurchase)
+        .values({
+          userId: 'ann',
+          passId: 'p30',
+          currency: 'INR',
+          amount: 9900,
+          days: 30,
+          razorpayOrderId: 'order_1',
+        })
+        .returning()
+    )[0]!;
+
+    const end = await grantPass(db, 'ann', purchase, NOW);
+    expect(end).toEqual(new Date(NOW.getTime() + 30 * 86_400_000));
+    const [sub] = await db
+      .select()
+      .from(schema.subscription)
+      .where(eq(schema.subscription.userId, 'ann'));
+    expect(sub).toMatchObject({
+      plan: 'pro',
+      status: 'active',
+      provider: 'razorpay',
+      currentPeriodEnd: end,
+    });
+    const [paid] = await db.select().from(schema.passPurchase);
+    expect(paid).toMatchObject({ status: 'paid', paidAt: NOW });
+
+    // Verify and webhook may both fire: the second grant adds nothing.
+    expect(await grantPass(db, 'ann', purchase, NOW)).toEqual(end);
+    const [again] = await db
+      .select()
+      .from(schema.subscription)
+      .where(eq(schema.subscription.userId, 'ann'));
+    expect(again?.currentPeriodEnd).toEqual(end);
+
+    // A second purchase stacks days onto the end of the first.
+    const second = (
+      await db
+        .insert(schema.passPurchase)
+        .values({
+          userId: 'ann',
+          passId: 'p90',
+          currency: 'USD',
+          amount: 500,
+          days: 90,
+          razorpayOrderId: 'order_2',
+          razorpayPaymentId: 'pay_2',
+        })
+        .returning()
+    )[0]!;
+    const later = await grantPass(db, 'ann', second, NOW);
+    expect(later).toEqual(new Date(end!.getTime() + 90 * 86_400_000));
   });
 
   it('lists a user custom feeds', async () => {

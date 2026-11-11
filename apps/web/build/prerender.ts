@@ -47,7 +47,8 @@ export function robotsTxt(siteUrl: string): string {
 }
 
 export function sitemapXml(siteUrl: string): string {
-  const urls = ['/', '/read', '/pricing'].map((p) => `  <url><loc>${siteUrl}${p}</loc></url>`);
+  const paths = ['/', '/read', ...Object.keys(PAGE_META).filter((p) => p !== '/')];
+  const urls = paths.map((p) => `  <url><loc>${siteUrl}${p}</loc></url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
 }
 
@@ -60,12 +61,16 @@ export function siteUrlPlugin(siteUrl: string): Plugin {
 }
 
 /**
- * Pre-renders `/` and `/pricing` into the build: `index.html` gets the landing markup, `pricing/index.html`
- * is a copy with the pricing markup and head, and robots.txt and sitemap.xml are written from the site URL.
- * The React tree is rendered with `react-dom/server` through a throwaway Vite SSR server, so no extra
- * dependency or browser is needed.
+ * Pre-renders every page in `PAGE_META` into the build: `index.html` gets the landing markup, each other
+ * path gets its own `<path>/index.html` with that page's markup and head, and robots.txt and sitemap.xml
+ * are written from the site URL. The React tree is rendered with `react-dom/server` through a throwaway
+ * Vite SSR server, so no extra dependency or browser is needed.
  */
-export function prerenderPlugin(siteUrl: string, root: string): Plugin {
+export function prerenderPlugin(
+  siteUrl: string,
+  root: string,
+  define: Record<string, string> = {},
+): Plugin {
   let pages: Record<PrerenderPath, string>;
   return {
     name: 'radar:prerender',
@@ -81,6 +86,7 @@ export function prerenderPlugin(siteUrl: string, root: string): Plugin {
         appType: 'custom',
         server: { middlewareMode: true, hmr: false, watch: null },
         optimizeDeps: { noDiscovery: true },
+        define,
       });
       try {
         const mod = await server.ssrLoadModule('/src/prerender.tsx');
@@ -94,11 +100,14 @@ export function prerenderPlugin(siteUrl: string, root: string): Plugin {
       if (!index || index.type !== 'asset') throw new Error('prerender: index.html was not built');
       const base = String(index.source);
       index.source = fillRoot(base, '/', pages['/']);
-      this.emitFile({
-        type: 'asset',
-        fileName: 'pricing/index.html',
-        source: fillRoot(setPageHead(base, '/pricing', siteUrl), '/pricing', pages['/pricing']),
-      });
+      for (const path of Object.keys(PAGE_META) as PrerenderPath[]) {
+        if (path === '/') continue;
+        this.emitFile({
+          type: 'asset',
+          fileName: `${path.slice(1)}/index.html`,
+          source: fillRoot(setPageHead(base, path, siteUrl), path, pages[path]),
+        });
+      }
       this.emitFile({ type: 'asset', fileName: 'robots.txt', source: robotsTxt(siteUrl) });
       this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: sitemapXml(siteUrl) });
     },

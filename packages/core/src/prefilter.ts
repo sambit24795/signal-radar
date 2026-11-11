@@ -58,16 +58,28 @@ export interface Prefiltered {
   niches: string[];
 }
 
-/** Drop items with zero keyword hits unless `alwaysInclude(item)` is true. */
+/**
+ * Drop items with zero keyword hits unless `alwaysInclude(item)` is true.
+ * `owners` names the topics an item was fetched for (topic sources): it belongs to them even
+ * without a keyword hit, as a weak match.
+ */
 export function prefilter(
   items: Item[],
   niches: Niche[],
   alwaysInclude: (item: Item) => boolean = () => false,
+  owners?: (item: Item) => readonly string[] | undefined,
 ): Prefiltered[] {
   const compiled = compileNiches(niches);
+  const weights = new Map(niches.map((n) => [n.id, n.weight]));
   const out: Prefiltered[] = [];
   for (const item of items) {
     const m = scoreKeywords(item, compiled);
+    for (const id of owners?.(item) ?? []) {
+      const w = weights.get(id);
+      if (w === undefined || m.niches.includes(id)) continue;
+      m.niches.push(id);
+      if (m.keywordScore === 0) m.keywordScore = Math.round(BODY_HIT * w * 100) / 100;
+    }
     if (m.keywordScore > 0 || alwaysInclude(item)) out.push({ item, ...m });
   }
   return out;

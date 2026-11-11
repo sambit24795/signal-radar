@@ -18,6 +18,11 @@ describe('parseRoute', () => {
     expect(parseRoute('').name).toBe('landing');
   });
 
+  it('serves the landing page at /about without the returning-visitor redirect', () => {
+    expect(parseRoute('/about')).toEqual({ name: 'landing', signup: false, about: true });
+    expect(parseRoute('/').about).toBe(false);
+  });
+
   it('reads the signup mode only on the sign-in screen', () => {
     expect(parseRoute('/signin', '?mode=signup').signup).toBe(true);
     expect(parseRoute('/signin', '').signup).toBe(false);

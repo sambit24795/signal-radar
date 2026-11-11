@@ -1,4 +1,5 @@
 import { mapLimit } from '../concurrency.js';
+import type { CreatorProfile } from '../creatorProfile.js';
 import { createFetch, type FetchFn } from '../http.js';
 import type { RadarConfig, ScoredItem } from '../schema.js';
 import { anthropicProvider } from './anthropic.js';
@@ -95,6 +96,7 @@ export async function scoreItems(
   opts: {
     niches: RadarConfig['niches'];
     feedback?: Feedback;
+    creator?: CreatorProfile | null;
     limit: number;
     concurrency: number;
     warn: (m: string) => void;
@@ -108,7 +110,7 @@ export async function scoreItems(
       failed: [],
     };
   }
-  const system = buildSystemPrompt(opts.niches, opts.feedback ?? emptyFeedback());
+  const system = buildSystemPrompt(opts.niches, opts.feedback ?? emptyFeedback(), opts.creator);
   const scored = await mapLimit(top, opts.concurrency, async (item) => ({
     item,
     ai: await scoreOne(provider, system, item, opts.warn),

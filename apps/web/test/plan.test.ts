@@ -19,10 +19,10 @@ describe('planSummary', () => {
     expect(p.detail).toBe('Ends 16 Nov 2026, in 7 days.');
   });
 
-  it('describes an active plan that can be canceled', () => {
+  it('describes an active pass as time running to a date', () => {
     const p = planSummary(sub({ currentPeriodEnd: '2026-12-09T00:00:00Z' }), NOW);
-    expect(p).toMatchObject({ kind: 'active', canCancel: true, canUpgrade: false });
-    expect(p.detail).toBe('Renews 9 Dec 2026.');
+    expect(p).toMatchObject({ kind: 'active', canCancel: false, canUpgrade: false });
+    expect(p.detail).toBe('Pro until 9 Dec 2026.');
   });
 
   it('keeps access visible after cancel until the period ends', () => {

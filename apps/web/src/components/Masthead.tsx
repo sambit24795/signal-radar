@@ -39,6 +39,7 @@ export function Masthead({ route, me, dark, onToggleTheme, onSignOut }: Props) {
             key={n.to}
             to={n.to}
             className="nav-link"
+            data-label={n.label}
             aria-current={route === n.to ? 'page' : undefined}
           >
             {n.label}

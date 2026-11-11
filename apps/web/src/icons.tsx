@@ -32,6 +32,12 @@ export const CloseIcon = () => (
   </svg>
 );
 
+export const PencilIcon = () => (
+  <svg {...base}>
+    <path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1ZM14.5 6.5l3 3" />
+  </svg>
+);
+
 export const TrashIcon = () => (
   <svg {...base}>
     <path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />

@@ -298,6 +298,34 @@ describe('runForUsers', () => {
     expect(out.users[0]).toMatchObject({ queued: 3, seenMarked: 2 });
   });
 
+  it('queues items from a topic source even without a keyword hit, for that user only', async () => {
+    const news = `<rss version="2.0"><channel><item><title>Paris week opens - Vogue</title>
+<link>https://news.google.com/rss/articles/p1</link><pubDate>Sun, 08 Nov 2026 01:00:00 GMT</pubDate></item></channel></rss>`;
+    const fetch = routedFetch({
+      'gol.test': () => res(fixture('gol.xml')),
+      'other.test': () => res('', 500),
+      'news.google.com': () => res(news),
+    });
+    const fashion: RadarUser['niches'] = [
+      {
+        id: 'fashion',
+        name: 'Fashion',
+        weight: 1,
+        keywords: ['fashion'],
+        sources: [{ type: 'news', query: 'Fashion' }],
+      },
+    ];
+    const m = memoryStore([user('ann', { niches: fashion }), user('bob')]);
+    await runForUsers({ ...config, provider: 'none' }, m.store, { env: {}, fetch, now: NOW });
+    expect(m.queue.get('ann')?.map((i) => i.title)).toContain('Paris week opens');
+    expect(m.queue.get('ann')?.find((i) => i.title === 'Paris week opens')?.niches).toEqual([
+      'fashion',
+    ]);
+    expect(m.queue.get('bob')?.some((i) => i.title === 'Paris week opens')).toBe(false);
+    expect(m.feed.some((i) => i.title === 'Paris week opens')).toBe(false);
+    expect(fetch.calls.filter((u) => u.includes('news.google.com'))).toHaveLength(2);
+  });
+
   it('works with the none provider (keyword rank, no LLM calls)', async () => {
     const fetch = routes();
     const m = memoryStore([user('ann')]);

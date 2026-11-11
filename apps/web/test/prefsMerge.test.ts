@@ -18,6 +18,7 @@ const config = (over: Partial<ServerConfig> = {}): ServerConfig => ({
   niches: [],
   sources: [],
   topN: 10,
+  creator: null,
   telegramChatId: null,
   notion: null,
   customFeeds: [],

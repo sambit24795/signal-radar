@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from 'react';
-import type { Niche } from '@radar/core/ranking';
-import { ApiError } from '../lib/api';
-import { cancelPlan } from '../lib/billing';
+import { useEffect, useState, type FormEvent } from 'react';
+import type { CreatorProfile, Niche } from '@radar/core/ranking';
 import { saveConfig, useConfig, type DraftFeed, type ServerConfig } from '../lib/config';
 import type { Defaults } from '../lib/feed';
-import { refreshMe, type Me } from '../lib/me';
+import type { Me } from '../lib/me';
 import { planSummary } from '../lib/plan';
+import { proUntilNote } from '../lib/passes';
+import { creatorToSave, emptyCreator } from '../lib/creator';
+import { CreatorFields } from './CreatorFields';
 import { Link } from './Link';
 import { SourcesEditor } from './Editors';
 import { TopicPicker } from './TopicPicker';
@@ -51,6 +52,7 @@ function SettingsForm({
   const isPro = me.subscription.isPro;
   const allIds = defaults.sources.map((s) => s.id);
   const [niches, setNiches] = useState<Niche[]>(() => config.niches);
+  const [creator, setCreator] = useState<CreatorProfile>(() => config.creator ?? emptyCreator());
   const [enabled, setEnabled] = useState(
     () => new Set(config.sources.length > 0 ? config.sources : allIds),
   );
@@ -62,6 +64,13 @@ function SettingsForm({
   );
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [message, setMessage] = useState('');
+
+  // "Saved" on the button is brief; it returns to its label by itself
+  useEffect(() => {
+    if (state !== 'saved') return;
+    const t = setTimeout(() => setState('idle'), 2500);
+    return () => clearTimeout(t);
+  }, [state]);
 
   const touch = () => state !== 'idle' && setState('idle');
   const hasStored = Boolean(config.notion?.hasToken);
@@ -95,6 +104,7 @@ function SettingsForm({
           ...config,
           customFeeds: feeds,
           niches,
+          creator: creatorToSave(creator),
           sources: allIds.filter((id) => enabled.has(id)),
           notion,
         },
@@ -125,6 +135,25 @@ function SettingsForm({
           niches={niches}
           onChange={(n) => {
             setNiches(n);
+            touch();
+          }}
+        />
+      </section>
+
+      <section className="settings-sec" aria-labelledby="set-briefs">
+        <h3 id="set-briefs" className="sheet-h">
+          Your briefs
+        </h3>
+        <p className="hint">
+          Hooks, angles and titles are written for what you make and who it is for.
+          {isPro
+            ? ''
+            : ' Briefs are part of Pro, and what you fill in here is kept for when you upgrade.'}
+        </p>
+        <CreatorFields
+          value={creator}
+          onChange={(c) => {
+            setCreator(c);
             touch();
           }}
         />
@@ -273,43 +302,25 @@ function SettingsForm({
             />
           </label>
         )}
+        <div className="save-bar">
+          <button type="submit" className="btn btn-solid" disabled={state === 'saving'}>
+            {state === 'saving' ? 'Saving' : state === 'saved' ? 'Saved' : 'Save changes'}
+          </button>
+          <span
+            className={state === 'error' ? 'warn' : 'meta'}
+            role={state === 'error' ? 'alert' : 'status'}
+          >
+            {state === 'error' ? message : ''}
+          </span>
+        </div>
       </section>
-
-      <div className="save-bar">
-        <button type="submit" className="btn btn-solid" disabled={state === 'saving'}>
-          {state === 'saving' ? 'Saving' : 'Save changes'}
-        </button>
-        <span
-          className={state === 'error' ? 'warn' : 'meta'}
-          role={state === 'error' ? 'alert' : 'status'}
-        >
-          {state === 'saved' || state === 'error' ? message : ''}
-        </span>
-      </div>
     </form>
   );
 }
 
 function PlanSection({ me }: { me: Me }) {
   const plan = planSummary(me.subscription);
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const cancel = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      await cancelPlan();
-      await refreshMe();
-      setConfirming(false);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not cancel. Try again in a moment.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
+  const proUntil = proUntilNote(me.proUntil);
   return (
     <section className="settings-sec" aria-labelledby="set-plan">
       <h3 id="set-plan" className="sheet-h">
@@ -322,44 +333,15 @@ function PlanSection({ me }: { me: Me }) {
       <div className="auth-actions">
         {plan.canUpgrade && (
           <Link to="pricing" className="btn">
-            {plan.kind === 'free'
-              ? 'Upgrade to Pro'
-              : plan.kind === 'trial'
-                ? 'Keep Pro'
-                : 'Renew Pro'}
+            {plan.kind === 'free' ? 'See Pricing' : 'Keep Pro'}
           </Link>
         )}
-        {plan.canCancel && !confirming && (
-          <button type="button" className="btn btn-quiet" onClick={() => setConfirming(true)}>
-            Cancel plan
-          </button>
+        {proUntil && !plan.canUpgrade && (
+          <Link to="pricing" className="btn">
+            Add days
+          </Link>
         )}
       </div>
-      {confirming && (
-        <div className="confirm" role="group" aria-label="Confirm cancellation">
-          <p>
-            You keep Pro until the end of the current period. After that the queue switches off.
-          </p>
-          <div className="auth-actions">
-            <button
-              type="button"
-              className="btn btn-solid"
-              disabled={busy}
-              onClick={() => void cancel()}
-            >
-              {busy ? 'Canceling' : 'Cancel plan'}
-            </button>
-            <button type="button" className="link" onClick={() => setConfirming(false)}>
-              Keep my plan
-            </button>
-          </div>
-        </div>
-      )}
-      {error && (
-        <p className="warn" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

@@ -1,5 +1,6 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Enriched, Feedback, FeedbackExample, RadarStore, ScoredItem } from '@radar/core';
+import { extendUntil } from '@radar/core';
 import type { Db } from './index.js';
 import * as schema from './schema.js';
 
@@ -11,6 +12,67 @@ function chunks<T>(xs: T[], n = CHUNK): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
   return out;
+}
+
+export interface PassGrant {
+  /** The `pass_purchase` row to mark paid. Its stored days are the ones granted. */
+  id: string;
+  /** The Razorpay payment that paid it, when known. */
+  razorpayPaymentId?: string | null;
+}
+
+/**
+ * Marks a pass purchase paid and extends Pro by its days, in one transaction.
+ * Idempotent: granting the same purchase twice adds days once and returns the same end.
+ * Returns the new `currentPeriodEnd`, or null when the purchase does not belong to the user.
+ */
+export async function grantPass(
+  db: Db,
+  userId: string,
+  purchase: PassGrant,
+  now = new Date(),
+): Promise<Date | null> {
+  return db.transaction(async (tx) => {
+    const [paid] = await tx
+      .update(schema.passPurchase)
+      .set({
+        status: 'paid',
+        paidAt: now,
+        ...(purchase.razorpayPaymentId ? { razorpayPaymentId: purchase.razorpayPaymentId } : {}),
+      })
+      .where(
+        and(
+          eq(schema.passPurchase.id, purchase.id),
+          eq(schema.passPurchase.userId, userId),
+          ne(schema.passPurchase.status, 'paid'),
+        ),
+      )
+      .returning({ days: schema.passPurchase.days });
+
+    const [sub] = await tx
+      .select({ currentPeriodEnd: schema.subscription.currentPeriodEnd })
+      .from(schema.subscription)
+      .where(eq(schema.subscription.userId, userId))
+      // Lock the row so two passes paid at once both add their days.
+      .for('update');
+
+    // Already paid (or not this user's purchase): leave the subscription untouched.
+    if (!paid) return sub?.currentPeriodEnd ?? null;
+
+    const currentPeriodEnd = extendUntil(sub?.currentPeriodEnd ?? null, now, paid.days);
+    const set = {
+      plan: 'pro',
+      status: 'active',
+      provider: 'razorpay',
+      currentPeriodEnd,
+    } as const;
+    await tx
+      .insert(schema.subscription)
+      .values({ userId, ...set })
+      .onConflictDoUpdate({ target: schema.subscription.userId, set });
+
+    return currentPeriodEnd;
+  });
 }
 
 /** Postgres implementation of core's `RadarStore`. */
@@ -29,10 +91,11 @@ export function createPgStore(db: Db): RadarStore {
         .innerJoin(schema.userConfig, eq(schema.userConfig.userId, schema.user.id))
         .leftJoin(schema.subscription, eq(schema.subscription.userId, schema.user.id))
         .orderBy(schema.user.createdAt);
-      // Mirrors isPro in apps/api; canceled keeps Pro until the paid period ends.
+      // Mirrors isPro in apps/api; active only while the paid period is unset or running.
       const isPro = (sub: (typeof rows)[number]['sub']) =>
         !!sub &&
-        (sub.status === 'active' ||
+        ((sub.status === 'active' &&
+          (sub.currentPeriodEnd === null || sub.currentPeriodEnd > now)) ||
           (sub.status === 'trialing' && !!sub.trialEndsAt && sub.trialEndsAt > now) ||
           (sub.status === 'canceled' &&
             sub.plan === 'pro' &&
@@ -65,7 +128,9 @@ export function createPgStore(db: Db): RadarStore {
           keywords: n.keywords.map((k) =>
             typeof k === 'string' ? k : { term: k.term, weight: k.weight ?? 1 },
           ),
+          ...(n.sources ? { sources: n.sources } : {}),
         })),
+        creator: cfg.creator,
         sources: cfg.sources,
         topN: cfg.topN,
         customFeeds: cfg.customFeeds,

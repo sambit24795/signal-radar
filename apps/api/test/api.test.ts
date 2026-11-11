@@ -15,11 +15,37 @@ const PAGE = `<html><head><title>Fallback title</title>
 <meta property="og:title" content="Xenia &amp; friends: a deep dive">
 <meta name="description" content="Plain description"><meta property="og:description" content="Why emulation matters"></head><body>hi</body></html>`;
 
-const netFetch = async (url: string): Promise<Response> => {
+const GNEWS = `<rss version="2.0"><channel><item><title>Paris week opens - Vogue</title>
+<link>https://news.google.com/rss/articles/p1</link><pubDate>Sun, 08 Nov 2026 01:00:00 GMT</pubDate></item></channel></rss>`;
+
+const REDDIT_HOT = `<feed><entry><category term="fashion" label="r/fashion"/><title>OOTD thread</title>
+<link href="https://www.reddit.com/r/fashion/comments/1/x/"/><updated>2026-11-09T03:00:00+00:00</updated></entry></feed>`;
+
+// When set, the fake model answers with this text; otherwise it fails with a 500.
+let modelReply: string | null = null;
+// The request body the fake model last received (holds the system prompt).
+let modelRequest = '';
+const netFetch = async (url: string, init?: RequestInit): Promise<Response> => {
   const host = new URL(url).hostname;
   if (host === 'page.example') return new Response(PAGE);
-  if (host === 'api.deepseek.com') return new Response('boom', { status: 500 });
+  if (host === 'api.deepseek.com') {
+    modelRequest = typeof init?.body === 'string' ? init.body : '';
+    return modelReply
+      ? new Response(JSON.stringify({ choices: [{ message: { content: modelReply } }] }))
+      : new Response('boom', { status: 500 });
+  }
   if (host === 'space.example') return new Response(RSS);
+  if (host === 'news.google.com') return new Response(GNEWS);
+  if (host === 'www.reddit.com') {
+    if (url.includes('/subreddits/search.rss')) {
+      return url.includes('q=down')
+        ? new Response('', { status: 429 })
+        : new Response(
+            '<feed><entry><link href="https://www.reddit.com/r/fashion/"/></entry><entry><link href="https://www.reddit.com/r/streetwear/"/></entry><entry><link href="https://www.reddit.com/r/third/"/></entry></feed>',
+          );
+    }
+    return new Response(REDDIT_HOT);
+  }
   if (host === 'redir.example') {
     return new Response('', { status: 302, headers: { location: 'http://169.254.169.254/' } });
   }
@@ -41,6 +67,7 @@ describe.skipIf(!dbAvailable)('api', () => {
     await ctx?.close();
   });
   beforeEach(async () => {
+    modelReply = null;
     await ctx.reset();
   });
 
@@ -188,6 +215,48 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect(((await bad.json()) as Json).error).toContain('topN');
     });
 
+    it('round-trips the creator profile, keeps it when omitted and clears it with null', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const base = { niches: [], sources: [], topN: 5, telegramChatId: null, notion: null };
+      const put = (json: unknown) =>
+        call(ctx.app, '/api/me/config', { method: 'PUT', user: u, json });
+      const creator = {
+        makes: ['video', 'posts'],
+        audience: '  junior web devs ',
+        resources: 'a Mac, free tools only',
+        tone: 'plain',
+      };
+      const saved = (await (await put({ ...base, creator })).json()) as Json;
+      expect(saved.config.creator).toEqual({ ...creator, audience: 'junior web devs' });
+      const got = (await (await call(ctx.app, '/api/me/config', { user: u })).json()) as Json;
+      expect(got.config.creator.makes).toEqual(['video', 'posts']);
+      await put(base);
+      const kept = (await (await call(ctx.app, '/api/me/config', { user: u })).json()) as Json;
+      expect(kept.config.creator.tone).toBe('plain');
+      await put({ ...base, creator: null });
+      const cleared = (await (await call(ctx.app, '/api/me/config', { user: u })).json()) as Json;
+      expect(cleared.config.creator).toBeNull();
+    });
+
+    it('rejects an invalid creator profile with 400', async () => {
+      const u = await signUp(ctx.app, 'ann@example.com');
+      const base = { niches: [], sources: [], topN: 5, telegramChatId: null, notion: null };
+      for (const creator of [
+        { makes: ['tiktok'] },
+        { makes: [], tone: 'angry' },
+        { makes: [], audience: 'x'.repeat(81) },
+        { makes: [], resources: 'x'.repeat(121) },
+        { audience: 'no makes' },
+      ]) {
+        const res = await call(ctx.app, '/api/me/config', {
+          method: 'PUT',
+          user: u,
+          json: { ...base, creator },
+        });
+        expect(res.status).toBe(400);
+      }
+    });
+
     it('stamps onboardedAt on the first save only', async () => {
       const u = await signUp(ctx.app, 'ann@example.com');
       const cfg = { niches: [], sources: [], topN: 5, telegramChatId: null, notion: null };
@@ -245,6 +314,82 @@ describe.skipIf(!dbAvailable)('api', () => {
       });
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: 'invalid JSON body' });
+    });
+  });
+
+  describe('topic sources', () => {
+    const fashion = {
+      id: 'custom-1',
+      name: 'Fashion',
+      keywords: ['fashion'],
+      sources: [
+        { type: 'news', query: 'Fashion' },
+        { type: 'reddit', sub: 'fashion' },
+      ],
+    };
+    const put = (u: Awaited<ReturnType<typeof signUp>>, niches: unknown[]) =>
+      call(ctx.app, '/api/me/config', {
+        method: 'PUT',
+        user: u,
+        json: { niches, sources: [], topN: 5, notion: null },
+      });
+
+    it('stores sources with the topic and returns them', async () => {
+      const u = await signUp(ctx.app, 'ts1@example.com');
+      expect((await put(u, [fashion])).status).toBe(200);
+      const got = (await (await call(ctx.app, '/api/me/config', { user: u })).json()) as Json;
+      expect(got.config.niches[0].sources).toEqual(fashion.sources);
+      // Removing the topic removes its sources.
+      await put(u, []);
+      const gone = (await (await call(ctx.app, '/api/me/config', { user: u })).json()) as Json;
+      expect(gone.config.niches).toEqual([]);
+    });
+
+    it('rejects sources that are not a news search or a subreddit name', async () => {
+      const u = await signUp(ctx.app, 'ts2@example.com');
+      for (const bad of [
+        { type: 'rss', url: 'http://169.254.169.254/' },
+        { type: 'reddit', sub: '../etc' },
+        { type: 'news', query: '' },
+      ]) {
+        const res = await put(u, [{ ...fashion, sources: [bad] }]);
+        expect(res.status).toBe(400);
+      }
+      const four = Array.from({ length: 4 }, (_, i) => ({ type: 'reddit', sub: `sub${i}x` }));
+      expect((await put(u, [{ ...fashion, sources: four }])).status).toBe(400);
+    });
+
+    it('suggests up to two subreddits and says when Reddit would not answer', async () => {
+      const ok = (await (
+        await call(ctx.app, '/api/topics/sources', { method: 'POST', json: { name: 'Fashion' } })
+      ).json()) as Json;
+      expect(ok).toEqual({
+        reddit: [
+          { type: 'reddit', sub: 'fashion' },
+          { type: 'reddit', sub: 'streetwear' },
+        ],
+        available: true,
+      });
+      expect(
+        (await call(ctx.app, '/api/topics/sources', { method: 'POST', json: { name: '' } })).status,
+      ).toBe(400);
+    });
+
+    it('serves live items per source and rejects a free-form source', async () => {
+      const res = await call(ctx.app, '/api/topics/feed', {
+        method: 'POST',
+        json: { sources: fashion.sources },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Json;
+      expect(body.failed).toEqual([]);
+      const titles = body.results.flatMap((r: Json) => r.items.map((i: Json) => i.title)).sort();
+      expect(titles).toEqual(['OOTD thread', 'Paris week opens']);
+      const bad = await call(ctx.app, '/api/topics/feed', {
+        method: 'POST',
+        json: { sources: [{ type: 'rss', url: 'http://localhost/' }] },
+      });
+      expect(bad.status).toBe(400);
     });
   });
 
@@ -487,7 +632,7 @@ describe.skipIf(!dbAvailable)('api', () => {
       vi.unstubAllEnvs();
     });
 
-    it('adds with a title and no page fetch, as picked', async () => {
+    it('adds with a title and no page fetch, into New', async () => {
       const u = await signUp(ctx.app, 'a@example.com');
       const res = await add(u, {
         url: 'https://example.com/post?utm_source=x',
@@ -501,15 +646,15 @@ describe.skipIf(!dbAvailable)('api', () => {
         url: 'https://example.com/post',
         title: 'My find',
         source: 'Newsletter',
-        status: 'picked',
+        status: 'new',
         addedByUser: true,
         summary: 'A short note about the find.',
       });
-      expect(item.decidedAt).toBeTruthy();
-      const picked = (await (
-        await call(ctx.app, '/api/queue?status=picked', { user: u })
+      expect(item.decidedAt).toBeNull();
+      const fresh = (await (
+        await call(ctx.app, '/api/queue?status=new', { user: u })
       ).json()) as Json;
-      expect(picked.items).toHaveLength(1);
+      expect(fresh.items).toHaveLength(1);
     });
 
     it('reads og:title and og:description when only a URL is given', async () => {
@@ -521,7 +666,7 @@ describe.skipIf(!dbAvailable)('api', () => {
         title: 'Xenia & friends: a deep dive',
         summary: 'Why emulation matters',
         source: 'Added by you',
-        status: 'picked',
+        status: 'new',
       });
     });
 
@@ -553,7 +698,7 @@ describe.skipIf(!dbAvailable)('api', () => {
       expect(item).toMatchObject({ summary: 'Fallback text.', effort: null, hook: null });
     });
 
-    it('picks an existing item and returns 200', async () => {
+    it('brings a skipped duplicate back to New and returns 200', async () => {
       const u = await signUp(ctx.app, 'a@example.com');
       const [row] = await seedQueue(u.id, 1, 'dup');
       await ctx.db
@@ -563,8 +708,20 @@ describe.skipIf(!dbAvailable)('api', () => {
       const res = await add(u, { url: row!.url, title: 'again' });
       expect(res.status).toBe(200);
       const { item } = (await res.json()) as Json;
-      expect(item).toMatchObject({ id: row!.id, status: 'picked', addedByUser: false });
+      expect(item).toMatchObject({ id: row!.id, status: 'new', addedByUser: false });
       expect(await ctx.db.select().from(schema.queueItem)).toHaveLength(1);
+    });
+
+    it('leaves a picked duplicate where it is', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      const [row] = await seedQueue(u.id, 1, 'kept');
+      await ctx.db
+        .update(schema.queueItem)
+        .set({ status: 'picked' })
+        .where(eq(schema.queueItem.id, row!.id));
+      const res = await add(u, { url: row!.url, title: 'again' });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as Json).item).toMatchObject({ id: row!.id, status: 'picked' });
     });
 
     it('caps adds at 30 per rolling 24 hours with 429', async () => {
@@ -624,6 +781,116 @@ describe.skipIf(!dbAvailable)('api', () => {
     });
   });
 
+  describe('write a brief (POST /api/queue/:id/brief)', () => {
+    const brief = (u: Awaited<ReturnType<typeof signUp>> | undefined, id: string) =>
+      call(ctx.app, `/api/queue/${id}/brief`, { method: 'POST', ...(u ? { user: u } : {}) });
+    const reply = JSON.stringify({
+      score: 77,
+      why: 'Fits your niche.',
+      summary: 'A tight summary of the piece.',
+      hook: 'The one line that opens the video',
+      angle: 'Why this matters now',
+      title: 'A draft title',
+      format: 'short',
+      effort: 'S',
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('returns 402 for a free account and leaves the row alone', async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test');
+      modelReply = reply;
+      const u = await signUp(ctx.app, 'a@example.com');
+      const [row] = await seedQueue(u.id);
+      await expireTrial(u.id);
+      const res = await brief(u, row!.id);
+      expect(res.status).toBe(402);
+      expect(((await res.json()) as Json).error).toMatch(/pro/i);
+      const [after] = await ctx.db.select().from(schema.queueItem);
+      expect(after!.hook).toBeNull();
+    });
+
+    it("returns 404 for another user's item and for a bad id", async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test');
+      modelReply = reply;
+      const a = await signUp(ctx.app, 'a@example.com');
+      const b = await signUp(ctx.app, 'b@example.com');
+      const [row] = await seedQueue(a.id);
+      expect((await brief(b, row!.id)).status).toBe(404);
+      expect((await brief(b, 'nope')).status).toBe(404);
+      expect((await brief(undefined, row!.id)).status).toBe(401);
+    });
+
+    it('fills the brief fields from the model', async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test');
+      modelReply = reply;
+      const u = await signUp(ctx.app, 'a@example.com');
+      const [row] = await seedQueue(u.id);
+      const res = await brief(u, row!.id);
+      expect(res.status).toBe(200);
+      const { item } = (await res.json()) as Json;
+      expect(item).toMatchObject({
+        id: row!.id,
+        hook: 'The one line that opens the video',
+        angle: 'Why this matters now',
+        titleDraft: 'A draft title',
+        summary: 'A tight summary of the piece.',
+        why: 'Fits your niche.',
+        format: 'short',
+        effort: 'S',
+        score: 77,
+        reasons: ['Fits your niche.'],
+      });
+      const [after] = await ctx.db.select().from(schema.queueItem);
+      expect(after!.hook).toBe('The one line that opens the video');
+    });
+
+    it("puts the user's creator profile in the system prompt", async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test');
+      modelReply = reply;
+      const u = await signUp(ctx.app, 'a@example.com');
+      await ctx.db
+        .update(schema.userConfig)
+        .set({
+          creator: {
+            makes: ['podcast'],
+            audience: 'indie game devs',
+            resources: 'a Steam Deck and a Mac',
+            tone: 'playful',
+          },
+        })
+        .where(eq(schema.userConfig.userId, u.id));
+      const [row] = await seedQueue(u.id);
+      expect((await brief(u, row!.id)).status).toBe(200);
+      const sent = JSON.parse(modelRequest) as { messages: { role: string; content: string }[] };
+      const system = sent.messages.find((m) => m.role === 'system')!.content;
+      expect(system).toContain('Podcast');
+      expect(system).toContain('indie game devs');
+      expect(system).toContain('a Steam Deck and a Mac');
+      expect(system).toContain('playful');
+    });
+
+    it('returns 502 and leaves the row unchanged when the model fails', async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test');
+      const u = await signUp(ctx.app, 'a@example.com');
+      const [row] = await seedQueue(u.id);
+      const res = await brief(u, row!.id);
+      expect(res.status).toBe(502);
+      expect(((await res.json()) as Json).error).toBe('Could not write the brief. Try again.');
+      const [after] = await ctx.db.select().from(schema.queueItem);
+      expect(after).toEqual(row);
+    });
+
+    it('returns 503 when no model key is configured', async () => {
+      vi.stubEnv('DEEPSEEK_API_KEY', '');
+      const u = await signUp(ctx.app, 'a@example.com');
+      const [row] = await seedQueue(u.id);
+      const res = await brief(u, row!.id);
+      expect(res.status).toBe(503);
+    });
+  });
+
   describe('Pro gate', () => {
     it('keeps the queue open to free accounts, but Pro routes return 402 once the trial has expired', async () => {
       const u = await signUp(ctx.app, 'a@example.com');
@@ -656,6 +923,24 @@ describe.skipIf(!dbAvailable)('api', () => {
           .where(eq(schema.subscription.userId, u.id));
         expect(await proOf(ctx.app, u)).toBe(false);
       }
+    });
+
+    it('counts active only while currentPeriodEnd is unset (legacy) or in the future', async () => {
+      const u = await signUp(ctx.app, 'a@example.com');
+      const setSub = (currentPeriodEnd: Date | null) =>
+        ctx.db
+          .update(schema.subscription)
+          .set({ status: 'active', plan: 'pro', trialEndsAt: null, currentPeriodEnd })
+          .where(eq(schema.subscription.userId, u.id));
+
+      await setSub(null);
+      expect(await proOf(ctx.app, u)).toBe(true);
+
+      await setSub(new Date(Date.now() + 86_400_000));
+      expect(await proOf(ctx.app, u)).toBe(true);
+
+      await setSub(new Date(Date.now() - 1000));
+      expect(await proOf(ctx.app, u)).toBe(false);
     });
 
     it('POST /api/dev/upgrade makes the caller pro/active outside production', async () => {
@@ -700,6 +985,21 @@ describe.skipIf(!dbAvailable)('api', () => {
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ url: null, upgraded: true });
         expect(await proOf(prod.app, u)).toBe(true);
+      } finally {
+        await prod.close();
+      }
+    });
+
+    it('refuses the free stub checkout in production once Razorpay is set up', async () => {
+      const prod = await setup({
+        NODE_ENV: 'production',
+        RAZORPAY_KEY_ID: 'rzp_test_x',
+        RAZORPAY_KEY_SECRET: 'secret',
+      });
+      try {
+        const u = await signUp(prod.app, 'b@example.com');
+        const res = await call(prod.app, '/api/billing/checkout', { method: 'POST', user: u });
+        expect(res.status).toBe(501);
       } finally {
         await prod.close();
       }

@@ -43,3 +43,11 @@ describe('queue prepend', () => {
     expect(again.items.map((i) => i.id)).toEqual(['b', 'c', 'a']);
   });
 });
+
+describe('normalizeLink: public hosts only', () => {
+  it('refuses localhost and other bare hosts', () => {
+    expect(normalizeLink('localhost:3000/x')).toBeNull();
+    expect(normalizeLink('http://intranet/page')).toBeNull();
+    expect(normalizeLink('example.com/post')).toBe('https://example.com/post');
+  });
+});

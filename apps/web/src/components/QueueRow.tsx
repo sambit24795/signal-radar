@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { ItemActions } from './ItemActions';
 import { Link } from './Link';
-import { copyText, queueMeta, type QueueItem, type QueueStatus } from '../lib/queue';
+import { META_SEP } from '../lib/format';
+import {
+  copyText,
+  queueMeta,
+  writeQueueBrief,
+  type QueueItem,
+  type QueueStatus,
+} from '../lib/queue';
 
 interface Props {
   item: QueueItem;
@@ -14,6 +21,8 @@ interface Props {
   onDismissHint: () => void;
   onSelect: () => void;
   onDecide: (to: QueueStatus) => void;
+  /** The item with its freshly written brief. */
+  onUpdate: (item: QueueItem) => void;
 }
 
 /** One idea: the story, what it is, then the angle on it. Pick and Skip say what they do. */
@@ -26,10 +35,20 @@ export function QueueRow({
   onDismissHint,
   onSelect,
   onDecide,
+  onUpdate,
 }: Props) {
   const ref = useRef<HTMLLIElement>(null);
   const [more, setMore] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [briefing, setBriefing] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
   }, [selected]);
@@ -45,6 +64,23 @@ export function QueueRow({
   // With no summary there is nothing to lead with, so the rest is shown straight away.
   const collapsible = hasExtra && !!summary;
   const copy = copyText(item);
+
+  const briefLabel = item.hook ? 'Rewrite brief' : 'Write brief';
+  const doBrief = async () => {
+    setBriefing(true);
+    setBriefError(null);
+    try {
+      onUpdate(await writeQueueBrief(item.id));
+    } catch (e) {
+      if (mounted.current) {
+        setBriefError(
+          e instanceof Error && e.message ? e.message : 'Could not write the brief. Try again.',
+        );
+      }
+    } finally {
+      if (mounted.current) setBriefing(false);
+    }
+  };
 
   const doCopy = async () => {
     try {
@@ -67,7 +103,7 @@ export function QueueRow({
           {item.title}
         </a>
       </h3>
-      <p className="meta">{queueMeta(item, now).join(' · ')}</p>
+      <p className="meta">{queueMeta(item, now).join(META_SEP)}</p>
       {summary && <p className="q-summary">{summary}</p>}
 
       {hasExtra && (
@@ -122,7 +158,30 @@ export function QueueRow({
         </p>
       )}
 
-      <ItemActions url={item.url} title={item.title} />
+      <ItemActions
+        url={item.url}
+        title={item.title}
+        extra={
+          !locked ? (
+            <span aria-live="polite">
+              <button
+                type="button"
+                className="link-quiet"
+                disabled={briefing}
+                aria-label={briefing ? undefined : `${briefLabel}. ${item.title}`}
+                onClick={() => void doBrief()}
+              >
+                {briefing ? 'Writing the brief…' : briefLabel}
+              </button>
+            </span>
+          ) : undefined
+        }
+      />
+      {briefError && (
+        <p className="sum-note" role="alert">
+          {briefError}
+        </p>
+      )}
 
       <div className="q-actions">
         {item.status !== 'picked' && (
@@ -160,7 +219,7 @@ export function QueueRow({
       </div>
       {hint && (
         <p className="q-hint">
-          Pick saves this idea to your Picked tab. Skip takes it off the list. Both can be undone.{' '}
+          Pick saves it to Picked. Skip clears it. Both can be undone.{' '}
           <button type="button" className="link-quiet" onClick={onDismissHint}>
             Got it
           </button>

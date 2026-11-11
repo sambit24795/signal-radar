@@ -7,6 +7,7 @@ import {
 } from './digest/push.js';
 import { sendDigest, TelegramError } from './digest/telegram.js';
 import { mapLimit } from './concurrency.js';
+import type { CreatorProfile } from './creatorProfile.js';
 import { createFetch, type FetchFn } from './http.js';
 import { fetchPublicText, type Resolver } from './netguard.js';
 import { normalizeItem } from './normalize.js';
@@ -28,6 +29,8 @@ import {
   type Feedback,
 } from './score/index.js';
 import { parseFeed } from './sources/rss.js';
+import { fetchTopicSources } from './topicFeed.js';
+import { topicSourceKey, topicSourcesOf } from './topicSources.js';
 
 /** A feed URL a Pro user added themselves. */
 export interface CustomFeed {
@@ -46,6 +49,8 @@ export interface RadarUser {
   /** Missing means `pro`. Free users get the `none` provider and no outbound channels. */
   plan?: 'pro' | 'free';
   niches: Niche[];
+  /** What they make and for whom; shapes the scoring prompt. */
+  creator?: CreatorProfile | null;
   /** Enabled source ids; empty means every configured source. */
   sources: string[];
   topN: number;
@@ -191,6 +196,13 @@ export async function runForUsers(
     );
   // Custom feeds: each distinct URL fetched once, never written to the public feed.
   const customRaw = await fetchCustomFeeds(users, opts.fetch, opts.resolve, warn);
+  // Topic sources (a news search, subreddits): stored with each topic, fetched once per distinct source.
+  const topicFetch = await fetchTopicSources(
+    users.flatMap((u) => u.niches.flatMap(topicSourcesOf)),
+    fetchFn,
+    now,
+    { warn, retryOn429: true },
+  );
   const sharedIds = new Set(collected.items.map((i) => i.id));
   const out: UserRunResult[] = [];
 
@@ -223,18 +235,36 @@ export async function runForUsers(
           own.push(item);
         }
       }
+      // Items fetched for a topic belong to it even without a keyword hit.
+      const owners = new Map<string, string[]>();
+      for (const niche of user.niches) {
+        for (const src of topicSourcesOf(niche)) {
+          for (const item of topicFetch.items.get(topicSourceKey(src)) ?? []) {
+            const ids = owners.get(item.url) ?? [];
+            if (!ids.includes(niche.id)) ids.push(niche.id);
+            owners.set(item.url, ids);
+            if (ownIds.has(item.id)) continue;
+            ownIds.add(item.id);
+            own.push(item);
+          }
+        }
+      }
       const mine = [...shared, ...own];
       const seen = await store.seenUrls(
         user.id,
         mine.map((i) => i.url),
       );
       const unseen = mine.filter((i) => !seen.has(i.url));
-      const ranked = rank(prefilter(unseen, user.niches, always), user.topN);
+      const ranked = rank(
+        prefilter(unseen, user.niches, always, (i) => owners.get(i.url)),
+        user.topN,
+      );
       res.candidates = ranked.length;
 
       const feedback = await store.feedback(user.id, opts.feedbackLimit ?? 10);
       const scored = await scoreItems(user.plan === 'free' ? noneProvider : provider, ranked, {
         niches: user.niches,
+        creator: user.creator ?? null,
         feedback,
         limit: user.topN,
         concurrency: config.scoring.concurrency,

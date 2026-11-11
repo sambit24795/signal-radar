@@ -19,6 +19,7 @@ export const MomentumSchema = z.object({
   points: z.number().optional(),
   comments: z.number().optional(),
   stars: z.number().optional(),
+  views: z.number().optional(),
   perHour: z.number(),
 });
 export type Momentum = z.infer<typeof MomentumSchema>;
@@ -48,6 +49,7 @@ export interface RawItem {
   points?: number;
   comments?: number;
   stars?: number;
+  views?: number;
   tags?: string[];
   media?: { type: MediaType; thumbnail?: string };
   /** Overrides the source's display name for this item (e.g. `r/SteamDeck`). */
@@ -82,11 +84,22 @@ const KeywordSchema = z.union([
   z.object({ term: z.string().min(1), weight: z.number().positive().default(1) }),
 ]);
 
+/** Where a topic reads from beyond the default feed. Built from fixed hosts only: never a free-form URL. */
+export const TopicSourceSchema = z.discriminatedUnion('type', [
+  /** A Google News search, e.g. `fashion OR streetwear`. */
+  z.object({ type: z.literal('news'), query: z.string().trim().min(1).max(100) }),
+  /** A subreddit's hot posts. */
+  z.object({ type: z.literal('reddit'), sub: z.string().regex(/^[A-Za-z0-9_]{2,21}$/) }),
+]);
+export type TopicSource = z.infer<typeof TopicSourceSchema>;
+
 export const NicheSchema = z.object({
   id: z.string(),
   name: z.string(),
   weight: z.number().positive().default(1),
   keywords: z.array(KeywordSchema).min(1),
+  /** Stored with the topic. Missing means not set up yet: the news search is used until it is. */
+  sources: z.array(TopicSourceSchema).max(3).optional(),
 });
 export type Niche = z.infer<typeof NicheSchema>;
 
@@ -153,6 +166,10 @@ export type SourceConfig = z.infer<typeof SourceConfigSchema>;
 export type SourceConfigInput = z.input<typeof SourceConfigSchema>;
 
 export const RadarConfigSchema = z.object({
+  /** Owner's business or legal name, shown on the policy pages. */
+  legalName: z.string().default('TODO'),
+  /** Contact email shown on the policy pages. */
+  contactEmail: z.string().default('TODO'),
   niches: z.array(NicheSchema).min(1),
   sources: z.array(SourceConfigSchema),
   /** Base URL of an RSSHub instance, e.g. http://localhost:1200. Unset = rsshub sources disabled. */

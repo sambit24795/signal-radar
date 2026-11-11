@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../lib/api';
-import { searchEverywhere, sourceName, type EverywhereResult } from '../lib/search';
+import { answeredLine, searchEverywhere, sourceName, type EverywhereResult } from '../lib/search';
 import { ItemList, Skeleton } from './ItemList';
 
 type State =
@@ -76,12 +76,12 @@ export function SearchResults({ query, now, onBack }: Props) {
     );
   }
 
-  const { items, failed } = state.result;
+  const { items, failed, answered } = state.result;
   return (
     <>
       <p className="find-status" role="status">
         {items.length > 0
-          ? `${items.length} results for “${query}” from Hacker News, news sites, GitHub and DEV.`
+          ? `${items.length} results for “${query}” from ${answeredLine(answered)}.`
           : `Nothing found for “${query}”.`}{' '}
         {back}
       </p>

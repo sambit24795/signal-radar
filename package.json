@@ -29,6 +29,7 @@
     "@radar/db": "workspace:*",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",

@@ -1,12 +1,24 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
 export type RouteName =
-  'landing' | 'welcome' | 'read' | 'queue' | 'settings' | 'pricing' | 'signin';
+  | 'landing'
+  | 'welcome'
+  | 'read'
+  | 'queue'
+  | 'settings'
+  | 'pricing'
+  | 'signin'
+  | 'terms'
+  | 'privacy'
+  | 'refunds'
+  | 'contact';
 
 export interface Route {
   name: RouteName;
   /** `/signin?mode=signup` opens the sign-in screen on its "create account" side. */
   signup: boolean;
+  /** `/about` shows the landing page without sending returning visitors on to Read. */
+  about: boolean;
 }
 
 const PATHS: Record<RouteName, string> = {
@@ -17,6 +29,10 @@ const PATHS: Record<RouteName, string> = {
   settings: '/settings',
   pricing: '/pricing',
   signin: '/signin',
+  terms: '/terms',
+  privacy: '/privacy',
+  refunds: '/refunds',
+  contact: '/contact',
 };
 
 const BY_PATH = new Map<string, RouteName>(
@@ -26,9 +42,10 @@ const BY_PATH = new Map<string, RouteName>(
 /** Unknown paths fall back to the Read view; `/` is the landing page; a trailing slash is ignored. */
 export function parseRoute(pathname: string, search = ''): Route {
   const clean = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  if (clean === '/about') return { name: 'landing', signup: false, about: true };
   const name = BY_PATH.get(clean || '/') ?? 'read';
   const signup = name === 'signin' && new URLSearchParams(search).get('mode') === 'signup';
-  return { name, signup };
+  return { name, signup, about: false };
 }
 
 export function hrefFor(name: RouteName, opts: { signup?: boolean } = {}): string {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Niche } from '@radar/core/ranking';
+import type { CreatorProfile, Niche } from '@radar/core/ranking';
 import { saveConfig, type DraftFeed, type ServerConfig } from '../lib/config';
 import type { Defaults } from '../lib/feed';
 import { hostOf, MAX_CUSTOM_FEEDS } from '../lib/feeds';
@@ -11,6 +11,8 @@ import {
 } from '../lib/onboarding';
 import { MAX_NICHES, PRESETS } from '../lib/presets';
 import { navigate } from '../lib/route';
+import { creatorToSave, emptyCreator } from '../lib/creator';
+import { CreatorFields } from './CreatorFields';
 import { SourcesEditor } from './Editors';
 import { FeedAdder, FeedList } from './Feeds';
 import { Link } from './Link';
@@ -24,10 +26,11 @@ interface Props {
   localNiches: Niche[] | null;
 }
 
-/** Two short steps after sign-up: what you follow, then where it is read from. */
+/** Three short steps after sign-up: what you follow, what you make, then where it is read from. */
 export function Welcome({ config, defaults, isPro, localNiches }: Props) {
   const allIds = defaults.sources.map((s) => s.id);
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [creator, setCreator] = useState<CreatorProfile>(() => config.creator ?? emptyCreator());
   const [niches, setNiches] = useState<Niche[]>(() =>
     (localNiches ?? config.niches).slice(0, MAX_NICHES),
   );
@@ -51,7 +54,7 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
   const suggestedUrls = new Set(suggestions.map((f) => f.url));
   const manual = feeds.filter((f) => !PRESETS.some((p) => p.feeds.some((pf) => pf.url === f.url)));
 
-  const toSources = () => {
+  const toFeeds = () => {
     // Pre-check the suggestions that are new to this visit; keep what the user already decided.
     const fresh = suggestions.filter((f) => !seen.has(f.url));
     const presetUrls = new Set(PRESETS.flatMap((p) => p.feeds.map((f) => f.url)));
@@ -62,7 +65,13 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
       ...fresh.filter((f) => picks.has(f.url)).map((f) => ({ url: f.url, title: f.title })),
     ]);
     setSeen(new Set([...seen, ...fresh.map((f) => f.url)]));
-    setStep(2);
+    setStep(3);
+  };
+
+  // Skipping keeps whatever the account already had.
+  const toSources = (keep: boolean) => {
+    if (!keep) setCreator(config.creator ?? emptyCreator());
+    toFeeds();
   };
 
   const toggleSuggested = (url: string, title: string) =>
@@ -90,6 +99,7 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
           niches,
           sources: allIds.filter((id) => enabled.has(id)),
           customFeeds: feeds,
+          creator: creatorToSave(creator),
         },
         undefined,
         isPro,
@@ -107,7 +117,7 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
     <section className="welcome" aria-labelledby="welcome-title">
       <div className="welcome-top">
         <ol className="stepbar" aria-label="Setup steps">
-          {(['Topics', 'Sources'] as const).map((label, i) => (
+          {(['Topics', 'Brief', 'Sources'] as const).map((label, i) => (
             <li key={label} aria-current={step === i + 1 ? 'step' : undefined}>
               <span className="rank" aria-hidden="true">
                 {i + 1}
@@ -116,9 +126,11 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
             </li>
           ))}
         </ol>
-        <button type="button" className="link" onClick={() => void skip()}>
-          Skip for now
-        </button>
+        {step !== 2 && (
+          <button type="button" className="text-btn" onClick={() => void skip()}>
+            Skip for now
+          </button>
+        )}
       </div>
 
       {step === 1 ? (
@@ -138,11 +150,34 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
               type="button"
               className="btn btn-solid"
               disabled={niches.length === 0}
-              onClick={toSources}
+              onClick={() => setStep(2)}
             >
-              Next: sources
+              Next
             </button>
             {niches.length === 0 && <span className="hint">Pick at least one topic.</span>}
+          </div>
+        </>
+      ) : step === 2 ? (
+        <>
+          <h2 id="welcome-title" className="page-title" ref={heading} tabIndex={-1}>
+            What do you make?
+          </h2>
+          <p className="lede">
+            This shapes the hooks and angles in your briefs. Everything here is optional, and you
+            can change it later in Settings.
+          </p>
+
+          <div className="welcome-sec">
+            <CreatorFields value={creator} onChange={setCreator} />
+          </div>
+
+          <div className="welcome-foot">
+            <button type="button" className="btn btn-solid" onClick={() => toSources(true)}>
+              Continue
+            </button>
+            <button type="button" className="text-btn" onClick={() => toSources(false)}>
+              Skip for now
+            </button>
           </div>
         </>
       ) : (
@@ -236,8 +271,8 @@ export function Welcome({ config, defaults, isPro, localNiches }: Props) {
             >
               {busy ? 'Saving' : 'Finish setup'}
             </button>
-            <button type="button" className="link" onClick={() => setStep(1)}>
-              Back to topics
+            <button type="button" className="text-btn" onClick={() => setStep(2)}>
+              Back
             </button>
           </div>
           <p className="hint">

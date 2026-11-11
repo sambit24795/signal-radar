@@ -6,7 +6,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./ranking": "./src/ranking.ts"
+    "./schema": "./src/schema.ts",
+    "./ranking": "./src/ranking.ts",
+    "./passes": "./src/passes.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

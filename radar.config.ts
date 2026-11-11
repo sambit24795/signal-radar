@@ -1,4 +1,4 @@
-import { defineConfig } from '@radar/core';
+import { defineConfig } from '@radar/core/schema';
 
 const subreddits = [
   'SteamDeck',
@@ -14,6 +14,10 @@ const subreddits = [
 ];
 
 export default defineConfig({
+  // Owner: fill these in before going live. They appear on the Terms, Privacy, Refunds and Contact pages.
+  legalName: 'TODO',
+  contactEmail: 'TODO',
+
   niches: [
     {
       id: 'ai',

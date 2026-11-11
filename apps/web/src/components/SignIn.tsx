@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { authErrorMessage, signIn, signUp } from '../lib/auth';
+import { takeGateNext } from '../lib/gate';
 import { refreshMe, type MeState } from '../lib/me';
 import { navigate } from '../lib/route';
 import { Link } from './Link';
@@ -30,7 +31,7 @@ export function SignIn({ me, startSignup, onSignOut }: Props) {
           <Link to="queue" className="btn btn-solid">
             Open the queue
           </Link>
-          <button type="button" className="link" onClick={onSignOut}>
+          <button type="button" className="text-btn" onClick={onSignOut}>
             Sign out
           </button>
         </div>
@@ -48,7 +49,9 @@ export function SignIn({ me, startSignup, onSignOut }: Props) {
     try {
       await (signup ? signUp(email.trim(), password) : signIn(email.trim(), password));
       await refreshMe();
-      navigate(signup ? '/welcome' : '/queue');
+      // A new account still needs onboarding; an existing one returns where it was asked from.
+      const back = takeGateNext();
+      navigate(signup ? '/welcome' : (back ?? '/queue'));
     } catch (err) {
       setError(authErrorMessage(err, mode));
     } finally {
@@ -104,7 +107,7 @@ export function SignIn({ me, startSignup, onSignOut }: Props) {
           <button type="submit" className="btn btn-solid" disabled={busy}>
             {busy ? 'One moment' : signup ? 'Start free trial' : 'Sign in'}
           </button>
-          <button type="button" className="link" onClick={toggle}>
+          <button type="button" className="text-btn" onClick={toggle}>
             {signup ? 'I already have an account' : 'Create an account'}
           </button>
         </div>

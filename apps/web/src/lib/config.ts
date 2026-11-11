@@ -1,4 +1,4 @@
-import type { Niche } from '@radar/core/ranking';
+import type { CreatorProfile, Niche } from '@radar/core/ranking';
 import { api } from './api';
 import { createStore } from './store';
 
@@ -19,6 +19,8 @@ export interface ServerConfig {
   /** Enabled source ids; empty means "the defaults". */
   sources: string[];
   topN: number;
+  /** What they make and for whom; null until set. */
+  creator: CreatorProfile | null;
   telegramChatId: string | null;
   notion: { dbId: string; hasToken: boolean } | null;
   /** Pro only. */
@@ -67,6 +69,7 @@ export function toBody(
     niches: cfg.niches,
     sources: cfg.sources,
     topN: cfg.topN,
+    creator: cfg.creator ?? null,
     ...(withFeeds
       ? {
           customFeeds: cfg.customFeeds.map((f) => ({

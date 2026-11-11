@@ -37,9 +37,11 @@ describe('core/ranking entry', () => {
       }
     }
     expect([...seen].map((f) => f.split('/').pop()).sort()).toEqual([
+      'creatorProfile.ts',
       'prefilter.ts',
       'rank.ts',
       'ranking.ts',
+      'topicSources.ts',
     ]);
   });
 });

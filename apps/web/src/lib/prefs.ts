@@ -38,7 +38,7 @@ export const emptyPrefs = (): StoredPrefs => ({
   disabledSources: [],
   sourceKinds: [],
   showAll: false,
-  theme: 'system',
+  theme: 'light',
 });
 
 const isKeyword = (k: unknown): boolean =>
@@ -87,7 +87,7 @@ export function loadPrefs(storage: PrefsStorage): StoredPrefs {
       : [],
     sourceKinds: Array.isArray(p.sourceKinds) ? p.sourceKinds.filter(isSourceKind) : [],
     showAll: p.showAll === true,
-    theme: p.theme === 'light' || p.theme === 'dark' ? p.theme : 'system',
+    theme: p.theme === 'light' || p.theme === 'dark' ? p.theme : 'light',
   };
 }
 

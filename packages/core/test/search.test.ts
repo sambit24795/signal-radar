@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { parseGoogleNews, queryTokens, relevance, searchAll } from '../src/search.js';
+import {
+  parseGoogleNews,
+  queryTokens,
+  rankResults,
+  recency,
+  relevance,
+  searchAll,
+} from '../src/search.js';
+import type { Item } from '../src/schema.js';
 
 const NEWS = `<?xml version="1.0"?><rss version="2.0"><channel><item>
 <title>Tokio ships a Rust framework - infoq.com</title><link>https://news.google.com/rss/articles/abc</link>
@@ -97,5 +105,86 @@ describe('search', () => {
     expect(relevance({ ...base, title: 'Async Rust in depth' }, t)).toBeGreaterThan(
       relevance({ ...base, title: 'Gardening', snippet: 'rust on tools' }, t),
     );
+  });
+
+  it('limits Hacker News and GitHub to the last 12 months', async () => {
+    const now = new Date('2026-11-10T00:00:00Z');
+    const urls: string[] = [];
+    const fetch = async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify({ hits: [], items: [] }));
+    };
+    await searchAll('fashion', { fetch, now, sources: ['hn', 'github'] });
+    const hn = decodeURIComponent(urls.find((u) => u.includes('algolia'))!);
+    expect(hn).toContain(`created_at_i>${Math.floor(Date.parse('2025-11-10T00:00:00Z') / 1000)}`);
+    const gh = decodeURIComponent(urls.find((u) => u.includes('github'))!);
+    expect(gh).toContain('fashion pushed:>2025-11-10');
+    expect(gh).not.toContain('sort=');
+  });
+
+  it('ages a repo by its last push', async () => {
+    const fetch = async () =>
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              full_name: 'a/b',
+              html_url: 'https://github.com/a/b',
+              stargazers_count: 5,
+              created_at: '2015-01-01T00:00:00Z',
+              pushed_at: '2026-11-08T00:00:00Z',
+            },
+          ],
+        }),
+      );
+    const { items } = await searchAll('b', {
+      fetch,
+      now: new Date('2026-11-10T00:00:00Z'),
+      sources: ['github'],
+    });
+    expect(items[0]?.publishedAt).toBe('2026-11-08T00:00:00.000Z');
+  });
+});
+
+describe('result order', () => {
+  const now = new Date('2026-11-10T00:00:00Z');
+  const base: Item = {
+    id: 'x',
+    url: 'https://ex.com/x',
+    title: 'Fashion',
+    snippet: '',
+    source: 's',
+    sourceKind: 'rss',
+    momentum: { perHour: 0 },
+    tags: [],
+    media: { type: 'article' },
+  };
+  const at = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+
+  it('weighs recency: 1 now, half a month ago, small after months, undated like six months', () => {
+    expect(recency({ publishedAt: at(0) }, now)).toBe(1);
+    expect(recency({ publishedAt: at(30) }, now)).toBeCloseTo(0.5, 5);
+    expect(recency({ publishedAt: at(180) }, now)).toBeCloseTo(1 / 7, 5);
+    expect(recency({}, now)).toBeCloseTo(1 / 7, 5);
+  });
+
+  it('puts a fresh news item above a stale high-score one', () => {
+    const stale = {
+      ...base,
+      id: 's',
+      url: 'https://ex.com/s',
+      sourceKind: 'hn' as const,
+      momentum: { perHour: 1, points: 900 },
+      publishedAt: at(300),
+    };
+    const fresh = { ...base, id: 'f', url: 'https://ex.com/f', publishedAt: at(1) };
+    const out = rankResults([stale, fresh], ['fashion'], now);
+    expect(out.map((i) => i.id)).toEqual(['f', 's']);
+  });
+
+  it('still ranks relevance first among equally fresh items', () => {
+    const off = { ...base, id: 'o', title: 'Gardening', publishedAt: at(1) };
+    const on = { ...base, id: 'n', publishedAt: at(1) };
+    expect(rankResults([off, on], ['fashion'], now).map((i) => i.id)).toEqual(['n', 'o']);
   });
 });
